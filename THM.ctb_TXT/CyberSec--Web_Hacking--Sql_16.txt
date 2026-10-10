@@ -1,0 +1,178 @@
+### Sql
+
+Different Types of Databases
+relational databases (aka SQL) vs non-relational databases (aka NoSQL). 
+
+                  
+                  
+Relational databases:Store structured data, meaning the data inserted into this database follows a structure. For example, the data collected on a user consists of first_name, last_name, email_address, username and password. When a new user joins, an entry is made in the database following this structure. This structured data is stored in rows and columns in a table (all of which will be covered shortly); relationships can then be made between two or more tables (for example, user and order_history), hence the term relational databases.
+
+
+
+
+Non-relational databases: Instead of storing data the above way, store data in a non-tabular format. For example, if documents are being scanned, which can contain varying types and quantities of data, and are stored in a database that calls for a non-tabular format. Here is an example of what that might look like: 
+
+ {
+    _id: ObjectId("4556712cd2b2397ce1b47661"),
+    name: { first: "Thomas", last: "Anderson" },
+    date_of_birth: new Date('Sep 2, 1964'),
+    occupation: [ "The One"],
+    steps_taken : NumberLong(4738947387743977493)
+}
+
+mysql> CREATE DATABASE database_name; create
+mysql> SHOW DATABASES; show databases 
+mysql> USE thm_bookmarket_db; cd database use database
+mysql> DROP database database_name; delete databeses tables
+
+mysql> CREATE TABLE book_inventory (     book_id INT AUTO_INCREMENT PRIMARY KEY,     book_name VARCHAR(255) NOT NULL,     publication_date DATE ); create tables
+mysql> SHOW TABLES; show tables 
+mysql> DESCRIBE book_inventory; show tables content;
+mysql> ALTER TABLE book_inventory ADD page_count INT; change database;
+
+
+
+	CRUD stands for Create, Read, Update, and Delete
+	
+
+Create Operation (INSERT) ->	mysql> INSERT INTO books (id, name, published_date, description)     VALUES (1, "Android Security Internals", "2014-10-14", "An In-Depth Guide to Android's Security Architecture");
+
+
+Read Operation (SELECT)->  mysql> SELECT * FROM books;  -> mysql> SELECT name, description FROM books;
+
+
+Update Operation (UPDATE)->  mysql> UPDATE books     
+																	SET description = "An In-Depth Guide to Android's Security Architecture."    
+																	 WHERE id = 1;
+
+
+Delete Operation (DELETE)-> mysql> DELETE FROM books WHERE id = 1;
+
+
+
+
+DISTINCT Clause
+The DISTINCT clause is used to avoid duplicate records when doing a query, returning only unique values.-> SELECT DISTINCT name FROM books;
+
+
+GROUP BY Clause-> mysql> SELECT name, COUNT(*)     FROM books     GROUP BY name;
+
+
+ 
+ORDER BY Clause ->   mysql> SELECT *     FROM books     ORDER BY published_date ASC;
+
+
+HAVING Clause->  mysql> SELECT name, COUNT(*)    FROM books     GROUP BY name     HAVING name LIKE '%Hack%';
+
+
+
+
+Logical Operators
+
+LIKE Operator->mysql> SELECT *     FROM books     WHERE description LIKE "%guide%";
+
+
+AND Operator-> mysql> SELECT *     FROM books     WHERE category = "Offensive Security" AND name = "Bug Bounty Bootcamp"; 
+
+
+OR Operator->mysql> SELECT *     FROM books     WHERE name LIKE "%Android%" OR name LIKE "%iOS%";
+
+
+NOT Operator->mysql> SELECT *     FROM books     WHERE NOT description LIKE "%guide%";
+
+
+BETWEEN Operator->mysql> SELECT *     FROM books     WHERE id BETWEEN 2 AND 4;
+
+
+
+
+String Functions
+CONCAT() Function -> mysql> SELECT CONCAT(name, " is a type of ", category, " book.") AS book_info FROM books;
+This function is used to add two or more strings together. It is useful to combine text from different columns.
+		book_info                                                         
+ Android Security Internals is a type of Defensive Security book. 
+ Bug Bounty Bootcamp is a type of Offensive Security book.
+ 
+ GROUP_CONCAT() Function->mysql> SELECT category, GROUP_CONCAT(name SEPARATOR ", ") AS books     FROM books     GROUP BY category;
+ This function can help us to concatenate data from multiple rows into one field. Let's explore an example of its usage.
+ 
+ SUBSTRING() Function-> mysql> SELECT SUBSTRING(published_date, 1, 4) AS published_year FROM books;
+ This function will retrieve a substring from a string within a query, starting at a determined position. The length of this substring can also be specified.
+ 
+ LENGTH() Function-> mysql> SELECT LENGTH(name) AS name_length FROM books;
+ 
+ 
+ 
+ Aggregate Functions
+mysql> SELECT COUNT(*) AS total_books FROM books;
+mysql> SELECT SUM(price) AS total_price FROM books;
+mysql> SELECT MAX(published_date) AS latest_book FROM books;
+mysql> SELECT MIN(published_date) AS earliest_book FROM books; 
+
+
+//Advanced
+
+
+
+In-band SQL Injection:
+
+	Error-Based SQL Injection: 
+		SELECT * FROM users WHERE id = 1 AND 1=CONVERT(int, (SELECT @@version))
+	Union-Based SQL Injection: 
+		SELECT name, email FROM users WHERE id = 1 UNION ALL SELECT username, password FROM admin.
+
+Inferential (Blind) SQL Injection:
+	Boolean-Based Blind SQL Injection:
+	SELECT * FROM users WHERE id = 1 AND 1=1 (true condition) versus SELECT * FROM users WHERE id = 1 AND 1=2 (false condition)
+	Time-Based Blind SQL Injection: 
+	SELECT * FROM users WHERE id = 1; IF (1=1) WAITFOR DELAY '00:00:05'--. If the response is delayed by 5 seconds
+
+
+
+
+Second-order SQL injection, also known as stored SQL injection, exploits vulnerabilities where user-supplied input is saved and subsequently used in a different part of the application, possibly after some initial processing.
+
+
+
+
+
+Character Encoding:
+
+URL Encoding:  ' OR 1=1-- can be encoded as %27%20OR%201%3D1--
+Hexadecimal Encoding: 
+SELECT * FROM users WHERE name = 'admin' can be encoded as SELECT * FROM users WHERE name = 0x61646d696e
+ 
+ Unicode Encoding:  admin can be encoded as \u0061\u0064\u006d\u0069\u006e
+ 
+ 
+ 
+ 
+ 
+ 
+ No-Quote SQL Injection:
+Using Numerical Values:   For example, instead of injecting ' OR '1'='1, an attacker can use OR 1=1 
+
+Using CONCAT() Function:  Attackers can use SQL functions like CONCAT() to construct strings without quotes. For example, CONCAT(0x61, 0x64, 0x6d, 0x69, 0x6e) constructs the string admin. The CONCAT() function and similar methods allow attackers to build strings without directly using quotes, making it harder for filters to detect and block the payload.
+
+
+
+No Spaces Allowed
+When spaces are not allowed or are filtered out, various techniques can be used to bypass this restriction.
+• Comments to Replace Spaces: One common method is to use SQL comments (/**/) to replace spaces. For example, instead of SELECT * FROM users WHERE name = 'admin', an attacker can use SELECT/**/*FROM/**/users/**/WHERE/**/name/**/='admin'. SQL comments can replace spaces in the query, allowing the payload to bypass filters that remove or block spaces.
+• Tab or Newline Characters: Another approach is using tab (\t) or newline (\n) characters as substitutes for spaces. Some filters might allow these characters, enabling the attacker to construct a query like SELECT\t*\tFROM\tusers\tWHERE\tname\t=\t'admin'. This technique can bypass filters that specifically look for spaces.
+• Alternate Characters: One effective method is using alternative URL-encoded characters representing different types of whitespace, such as %09 (horizontal tab), %0A (line feed), %0C (form feed), %0D (carriage return), and %A0 (non-breaking space). These characters can replace spaces in the payload. 
+
+| Scenario                      | Description                                                                                                  | Example                                                                                           |
+| Keywords like SELECT are banned | SQL keywords can often be bypassed by changing their case or adding inline comments to break them up | SElEcT * FrOm users or SE/**/LECT * FROM/**/users |
+| Spaces are banned | Using alternative whitespace characters or comments to replace spaces can help bypass filters. | SELECT%0A*%0AFROM%0Ausers or SELECT/**/*/**/FROM/**/users |
+| Logical operators like AND, OR are banned | Using alternative logical operators or concatenation to bypass keyword filters. | username = 'admin' && password = 'password' or username = 'admin'/**/||/**/1=1 -- |
+| Common keywords like UNION, SELECT are banned | Using equivalent representations such as hexadecimal or Unicode encoding to bypass filters. | SElEcT * FROM users WHERE username = CHAR(0x61,0x64,0x6D,0x69,0x6E) |
+| Specific keywords like OR, AND, SELECT, UNION are banned | Using obfuscation techniques to disguise SQL keywords by combining characters with string functions or comments. | SElECT * FROM users WHERE username = CONCAT('a','d','m','i','n') or SElEcT/**/username/**/FROM/**/users |
+
+
+
+
+
+
+
+

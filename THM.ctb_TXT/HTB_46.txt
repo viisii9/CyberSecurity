@@ -1,0 +1,11 @@
+# HTB
+
+| Feature                      | Your Bash Script                                            | Previous Python Script                                                    |
+| Command Encoding | Uses hex2bin() + xxd. | Uses hex2bin() + binascii. |
+| URL Handling | Uses curl -g (prevents URL mangling). | Standard URL encoding (sometimes fragile). |
+| Write Logic | Writes to /tmp/x.php. | Attempted /tmp/bridge.php. |
+| Post-Processing | Heavy Regex filtering of HTML/JSON. | Relied on JSON parsing (fails on "dirty" output). |
+| Payload | <?=system(...)?> (compact). | <?php system(...) ?> (standard). |
+
+
+

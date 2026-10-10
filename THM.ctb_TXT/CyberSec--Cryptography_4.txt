@@ -1,0 +1,195 @@
+## Cryptography
+
+Symetric Encryption:
+
+                              
+                              
+                              known as symmetric cryptography, uses the same key to encrypt and decrypt the data
+                              
+ Examples of symmetric encryption are DES (Data Encryption Standard), 3DES (Triple DES) and AES (Advanced Encryption Standard).
+• DES was adopted as a standard in 1977 and uses a 56-bit key. With the advancement in computing power, in 1999, a DES key was successfully broken in less than 24 hours, motivating the shift to 3DES.
+• 3DES is DES applied three times; consequently, the key size is 168 bits, though the effective security is 112 bits. 3DES was more of an ad-hoc solution when DES was no longer considered secure. 3DES was deprecated in 2019 and should be replaced by AES; however, it may still be found in some legacy systems.
+• AES was adopted as a standard in 2001. Its key size can be 128, 192, or 256 bits.
+
+
+
+Asymetric Encryption:
+                           
+
+
+
+Examples are RSA, Diffie-Hellman, and Elliptic Curve cryptography (ECC). The two keys involved in the process are referred to as a public key and a private key. Data encrypted with the public key can be decrypted with the private key. Your private key needs to be kept private, hence the name.
+
+
+RSA:
+
+
+
+RSA Example :
+
+Bob chooses two prime numbers: p = 157 and q = 199. He calculates n = p × q = 31243.With ϕ(n) = n − p − q + 1 = 31243 − 157 − 199 + 1 = 30888, Bob selects e = 163 such that e is relatively prime to ϕ(n); moreover, he selects d = 379, where e × d = 1 mod ϕ(n), i.e., e × d = 163 × 379 = 61777 and 61777 mod 30888 = 1. The public key is (n,e), i.e., (31243,163) and the private key is $(n,d), i.e., (31243,379).Let’s say that the value they want to encrypt is x = 13, then Alice would calculate and send y = xe mod n = 13163 mod 31243 = 16341.Bob will decrypt the received value by calculating x = yd mod n = 16341379 mod 31243 = 13. This way, Bob recovers the value that Alice sent. explain to me as a begginer 
+
+
+🧠 Step 1: Pick two prime numbers
+Bob starts with two prime numbers:
+
+
+
+p = 157    5
+q = 199    7
+
+
+These are secret — Bob keeps them hidden.
+
+🧮 Step 2: Multiply them to get n
+He multiplies them:
+
+
+
+n = p × q = 157 × 199 = 31243
+5 * 7 = 35
+
+This number n is called the modulus, and it’s public — everyone can see it.
+ But since only Bob knows p and q, it’s hard for others to reverse-engineer them from n.
+
+⚙️ Step 3: Calculate ϕ(n)
+The totient function ϕ(n) is used to help choose the keys.
+ϕ(n)=(p−1)×(q−1)ϕ(n) = (p - 1) × (q - 1)ϕ(n)=(p−1)×(q−1)or equivalently:
+ϕ(n)=n−p−q+1ϕ(n) = n - p - q + 1ϕ(n)=n−p−q+1Let’s compute it:
+
+
+
+ϕ(n) = 31243 - 157 - 199 + 1 = 30888
+
+35 - 5 - 7 +1 = 24
+
+🔐 Step 4: Choose e (the public exponent)
+Bob needs a number e that:
+1. Is smaller than ϕ(n), and
+
+2. Is coprime to ϕ(n)** (i.e., gcd(e, ϕ(n)) = 1)
+
+He picks:
+
+
+
+e = 163
+
+e = 11
+
+
+✅ This will be public — everyone knows it.
+
+🔏 Step 5: Compute d (the private exponent)
+Bob now finds d, which is the modular inverse of e modulo ϕ(n).
+This means:
+(e×d)mod  ϕ(n)=1(e × d) \mod ϕ(n) = 1(e×d)modϕ(n)=1He found:
+
+
+
+d = 379
+11 * x % 24 = 1
+d = 11
+
+So:
+
+
+
+163 × 379 = 61777
+61777 mod 30888 = 1 ✅
+
+
+That checks out.
+
+🗝 Step 6: Make the keys
+• Public key → (n, e) = (31243, 163)   35, 11
+
+• Private key → (n, d) = (31243, 379) 35, 11
+
+
+Public = what everyone can use to encrypt
+ Private = only Bob can use to decrypt
+
+✉️ Step 7: Alice wants to send x = 13
+She wants to send Bob the number 13, but she doesn’t want others to see it.
+She uses Bob’s public key to encrypt it.
+
+Encryption formula:
+y=xemod  ny = x^e \mod ny=xemodn That means:
+y=13163mod  31243y = 13^{163} \mod 31243y=13163mod31243 If you calculate that, you get:
+
+
+
+y = 16341
+
+
+So Alice sends 16341 to Bob.
+
+🔓 Step 8: Bob decrypts
+Bob uses his private key (n, d) to decrypt.
+x=ydmod  nx = y^d \mod nx=ydmodnThat means:
+x=16341379mod  31243=13x = 16341^{379} \mod 31243 = 13x=16341379mod31243=13✅ He gets back the original message (13).
+
+🎯 Summary
+
+| Step                                    | What happens                            | Values                                                     |
+| Choose primes | Secret | p=157, q=199  5  7 |
+| Compute n | n=p×q | 31243  35 |
+| Compute ϕ(n) | n−p−q+1 | 30888 24 |
+| Choose e | Public | 163 11 |
+| Find d | Private | 379 11 |
+| Encrypt | y = x^e mod n | 13^163 mod 31243 = 16341 |
+| Decrypt | x = y^d mod n | 16341^379 mod 31243 = 13 |
+
+
+22 ^ 11 % 35
+8 ^ 11 % 35
+
+Diffie-Hellman Key Exchange:
+
+                               
+                               
+         
+         
+         SSH-Keygen                      
+• DSA (Digital Signature Algorithm) is a public-key cryptography algorithm specifically designed for digital signatures.
+• ECDSA (Elliptic Curve Digital Signature Algorithm) is a variant of DSA that uses elliptic curve cryptography to provide smaller key sizes for equivalent security.
+• ECDSA-SK (ECDSA with Security Key) is an extension of ECDSA. It incorporates hardware-based security keys for enhanced private key protection.
+• Ed25519 is a public-key signature system using EdDSA (Edwards-curve Digital Signature Algorithm) with Curve25519.
+• Ed25519-SK (Ed25519 with Security Key) is a variant of Ed25519. Similar to ECDSA-SK, it uses a hardware-based security key for improved private key protection.
+
+root@TryHackMe# ssh-keygen -t ed25519
+Generating public/private ed25519 key pair.
+Enter file in which to save the key (/home/strategos/.ssh/id_ed25519): 
+Enter passphrase (empty for no passphrase): 
+Enter same passphrase again: 
+Your identification has been saved in /home/strategos/.ssh/id_ed25519
+Your public key has been saved in /home/strategos/.ssh/id_ed25519.pub
+The key fingerprint is:
+SHA256:4S4DQvRfp52UuNwg++nTcWlnITEJTbMcCU0N8UYC1do strategos@g5000
+The key's random art image is:
++--[ED25519 256]--+
+|  .       +XXB.  |
+| . .     . oBBo  |
+|  . . . = + o=o  |
+| .   . * X .o.E  |
+|  . . o S +  o . |
+|   . . o .. + o  |
+|      o +. + o   |
+|       +. .      |
+|        ..       |
++----[SHA256]-----+
+
+
+
+
+Digital signatures provide a way to verify the authenticity and integrity of a digital message or document. Proving the authenticity of files means we know who created or modified them. Using asymmetric cryptography, you produce a signature with your private key, which can be verified using your public key. Only you should have access to your private key, which proves you signed the file. In many modern countries, digital and physical signatures have the same legal value.
+
+Certificates are an essential application of public key cryptography, and they are also linked to digital signatures. A common place where they’re used is for HTTPS. How does your web browser know that the server you’re talking to is the real tryhackme.com?
+
+
+
+PGP stands for Pretty Good Privacy. It’s software that implements encryption for encrypting files, performing digital signing, and more. GnuPG or GPG is an open-source implementation of the OpenPGP standard.
+GPG is commonly used in email to protect the confidentiality of the email messages. Furthermore, it can be used to sign an email message and confirm its integrity.
+
+

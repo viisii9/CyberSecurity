@@ -1,0 +1,10 @@
+##### Insecure Deserialisation
+PHP function-> serialize()  unserialize()   if dev not cerfull we can add an ~ in the end in the web for e.x: http://10.66.130.8/who/index.php~ 
+
+Python function -> Pickle
+Ruby -> Marshal
+ .NET-> System.Text.Json for JSON
+ Java -> Serializable
+ 
+ 
+

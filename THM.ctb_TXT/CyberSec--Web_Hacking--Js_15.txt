@@ -1,0 +1,7 @@
+### Js
+We have understood how JS works and how we can read it until now, but what if the file is not human-readable and has been minified?
+Minification in JS is the process of compressing JS files by removing all unnecessary characters, such as spaces, line breaks, comments, and even shortening variable names. This helps reduce the file size and improves the loading time of web pages, especially in production environments. Minified files make the code more compact and harder to read for humans, but they still function exactly the same.
+Similarly, obfuscation is often used to make JS harder to understand by adding undesired code, renaming variables and functions to meaningless names, and even inserting dummy code.
+
+Deobfuscating a Code: Obfuscator.io Deobfuscator
+

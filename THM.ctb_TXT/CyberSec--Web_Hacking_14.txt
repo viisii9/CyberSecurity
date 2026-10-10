@@ -1,0 +1,77 @@
+## Web Hacking
+
+
+Methods
+GET
+Used to fetch data from the server without making any changes. Reminder! Make sure you’re only exposing data the user is allowed to see. Avoid putting sensitive info like tokens or passwords in GET requests since they can show up as plaintext.
+POST
+Sends data to the server, usually to create or update something. Reminder! Always validate and clean the input to avoid attacks like SQL injection or XSS.
+PUT
+Replaces or updates something on the server. Reminder! Make sure the user is authorised to make changes before accepting the request.
+DELETE
+Removes something from the server. Reminder! Just like with PUT, make sure only authorised users can delete resources.
+Besides these common methods, there are a few others used in specific cases:
+PATCH
+Updates part of a resource. It’s useful for making small changes without replacing the whole thing, but always validate the data to avoid inconsistencies.
+HEAD
+Works like GET but only retrieves headers, not the full content. It’s handy for checking metadata without downloading the full response.
+OPTIONS
+Tells you what methods are available for a specific resource, helping clients understand what they can do with the server.
+TRACE
+Similar to OPTIONS, it shows which methods are allowed, often for debugging. Many servers disable it for security reasons.
+CONNECT
+Used to create a secure connection, like for HTTPS. It’s not as common but is critical for encrypted communication.
+
+
+
+
+| Request Header | Example                                                     | Description                                                                                                                                        |
+| Host | Host: tryhackme.com | Specifies the name of the web server the request is for. |
+| User-Agent | User-Agent: Mozilla/5.0 | Shares information about the web browser the request is coming from. |
+| Referer | Referer:¬†https://www.google.com/ | Indicates the URL from which the request came from. |
+| Cookie | Cookie: user_type=student; room=introtowebapplication; room_status=in_progress | Information the web server previously asked the web browser to store is held in cookies. |
+| Content-Type | Content-Type: application/json | Describes what type or format of data is in the request. |
+
+
+
+Status Line
+Status Codes and Reason Phrases
+
+Informational Responses (100-199)
+These codes mean the server has received part of the request and is waiting for the rest. It’s a "keep going" signal.
+Successful Responses (200-299)
+These codes mean everything worked as expected. The server processed the request and sent back the requested data.
+Redirection Messages (300-399)
+These codes tell you that the resource you requested has moved to a different location, usually providing the new URL.
+Client Error Responses (400-499)
+These codes indicate a problem with the request. Maybe the URL is wrong, or you’re missing some required info, like authentication.
+Server Error Responses (500-599)
+These codes mean the server encountered an error while trying to fulfil the request. These are usually server-side issues and not the client’s fault.
+
+
+
+Which HTTP response header can reveal information about the web server's software and version, potentially exposing it to security risks if not removed? Server
+
+
+Which flag should be added to cookies in the Set-Cookie HTTP response header to ensure they are only transmitted over HTTPS, protecting them from being exposed during unencrypted transmissions? Secure
+
+Which flag should be added to cookies in the Set-Cookie HTTP response header to prevent them from being accessed via JavaScript, thereby enhancing security against XSS attacks? HttpOnly
+
+
+
+A CSP header is an additional security layer that can help mitigate against common attacks like Cross-Site Scripting (XSS). Malicious code could be hosted on a separate website or domain and injected into the vulnerable website. A CSP provides a way for administrators to say what domains or sources are considered safe and provides a layer of mitigation to such attacks.
+
+
+
+Security Headers
+
+
+Strict-Transport-Security (HSTS)
+The HSTS header ensures that web browsers will always connect over HTTPS. Let's look at an example of HSTS:
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+
+X-Content-Type-Options
+The X-Content-Type-Options header can be used to instruct browsers not to guess the MIME time of a resource but only use the Content-Type header. Here’s an example:
+
+X-Content-Type-Options: nosniff
+

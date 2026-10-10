@@ -1,0 +1,49 @@
+### OWASP Top 10
+1- Broken access controle (idor) -• Being able to view sensitive information from other users • Accessing unauthorized functionality
+
+2- Cryptographic failures: 
+			• When you are accessing your email account using your browser, you want to be sure that the communications between you and the server are encrypted. That way, any eavesdropper trying to capture your network packets won't be able to recover the content of your email addresses. When we encrypt the network traffic between the client and server, we usually refer to this as encrypting data in transit.
+
+			• Since your emails are stored in some server managed by your provider, it is also desirable that the email provider can't read their client's emails. To this end, your emails might also be encrypted when stored on the servers. This is referred to as encrypting data at rest.
+
+3- Injection - SQL Injection: Command 
+
+4- Insecure desings -  Insecure Password Resets
+
+5- Security misconfiguration• 
+	- Poorly configured permissions on cloud services, like S3 buckets.
+	• Having unnecessary features enabled, like services, pages, accounts or privileges.
+	• Default accounts with unchanged passwords.
+	• Error messages that are overly detailed and allow attackers to find out more about the system.
+	• Not using HTTP security headers.
+
+6- Vulnerable and Outdated Components - Exploit
+
+7- Identification and Authentication Failures
+• Brute force attacks: If a web application uses usernames and passwords, an attacker can try to launch brute force attacks that allow them to guess the username and passwords using multiple authentication attempts. 
+• Use of weak credentials: Web applications should set strong password policies. If applications allow users to set passwords such as "password1" or common passwords, an attacker can easily guess them and access user accounts.
+• Weak Session Cookies: Session cookies are how the server keeps track of users. If session cookies contain predictable values, attackers can set their own session cookies and access users' accounts. 
+
+
+8- Software and Data Integrity Failures 
+		This vulnerability arises from code or infrastructure that uses software or data without using any kind of integrity checks. Since no integrity verification is being done, an attacker might modify the software or data passed to the application, resulting in unexpected consequences.
+		The problem is that if an attacker somehow hacks into the jQuery official repository, they could change the contents of https://code.jquery.com/jquery-3.6.1.min.js to inject malicious code. As a result, anyone visiting your website would now pull the malicious code and execute it into their browsers unknowingly. This is a software integrity failure as your website makes no checks against the third-party library to see if it has changed. Modern browsers allow you to specify a hash along the library's URL so that the library code is executed only if the hash of the downloaded file matches the expected value. This security mechanism is called Subresource Integrity (SRI), and you can read more about it here.
+
+
+9- Security Logging and Monitoring Failures
+	 Logging is important because, in the event of an incident, the attackers' activities can be traced. Once their actions are traced, their risk and impact can be determined. Without logging, there would be no way to tell what actions were performed by an attacker if they gain access to particular web applications. 
+	
+10- Server-Side Request Forgery
+	This type of vulnerability occurs when an attacker can coerce a web application into sending requests on their behalf to arbitrary destinations while having control of the contents of the request itself. SSRF vulnerabilities often arise from implementations where our web application needs to use third-party services.
+	
+ 
+ can be used for much more:
+
+• Enumerate internal networks, including IP addresses and ports.
+• Abuse trust relationships between servers and gain access to otherwise restricted services.
+• Interact with some non-HTTP services to get remote code execution (RCE).
+
+
+
+
+

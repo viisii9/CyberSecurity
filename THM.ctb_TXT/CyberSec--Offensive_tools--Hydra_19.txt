@@ -1,0 +1,9 @@
+### Hydra
+
+| Option | Description                                                      |
+| -l | specifies the (SSH) username for login |
+| -P | indicates a list of passwords |
+| -t | sets the number of threads to spawn |
+
+
+

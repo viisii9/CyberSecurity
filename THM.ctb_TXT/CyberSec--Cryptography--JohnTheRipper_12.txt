@@ -1,0 +1,33 @@
+### JohnTheRipper
+john --format=raw-md5 --wordlist=/usr/share/wordlists/rockyou.txt hash_to_crack.txt
+
+When you tell John to use formats, if you’re dealing with a standard hash type, e.g. md5 as in the example above, you have to prefix it with raw- to tell John you’re just dealing with a standard hash type, though this doesn’t always apply. To check if you need to add the prefix or not, you can list all of John’s formats using john --list=formats and either check manually or grep for your hash type using something like      --------------   john --list=formats | grep -iF "md5"
+
+
+
+
+/etc/shadow
+unshadow local_passwd local_shadow > unshadowed.txt
+john --wordlist=SecLists/Passwords/xato-net-10-million-passwords.txt --format=raw-sha1 hash.txt
+
+
+
+Single Crack mode 
+
+Word Mangling
+The best way to explain Single Crack mode and word mangling is to go through an example:
+Consider the username “Markus”.
+
+Some possible passwords could be:
+• Markus1, Markus2, Markus3 (etc.)
+• MArkus, MARkus, MARKus (etc.)
+• Markus!, Markus$, Markus* (etc.)
+
+john --single --format=raw-sha256 hashes.txt
+
+
+
+rar2john [rar file] > [output file]
+zip2john [options] [zip file] > [output file]
+ssh2john [id_rsa private key file] > [output file]
+

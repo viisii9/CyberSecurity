@@ -1,0 +1,7 @@
+##### HTTP Request Smuggling
+this vulnerability mainly involves the Content-Length and Transfer-Encoding headers
+smuggler.py github
+
+CRLF injection
+\r\n in an HTTP/2 header, it might get translated by the proxy into HTTP/1.1 directly, which will be interpreted as a header separator
+

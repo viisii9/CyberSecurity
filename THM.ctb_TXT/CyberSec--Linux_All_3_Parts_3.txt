@@ -1,0 +1,32 @@
+## Linux All 3 Parts
+                                       
+                                       
+                                            
+| & | This operator allows you to run commands in the background of your terminal. |
+| && | This operator allows you to combine multiple commands together in one line of your terminal. |
+| > | This operator is a redirector - meaning that we can take the output from a command (such as using cat to output a file) and direct it elsewhere. |
+| >> | This operator does the same function of the > operator but appends the output rather than replacing (meaning nothing is overwritten). |
+
+
+
+find -name passwords.txt 
+ 
+  How do Processes Start?
+  
+  Once a system boots and it initialises, systemd is one of the first processes that are started. Any program or piece of software that we want to start will start as what's known as a child process of systemd. This means that it is controlled by systemd, but will run as its own process (although sharing the resources from systemd) to make it easier for us to identify and the likes.
+  
+  Getting Processes/Services to Start on Boot
+  
+  Enter the use of systemctl -- this command allows us to interact with the systemd process/daemon
+  
+systemctl [option] [service]      options:  Start Stop Enable Disable    services: like apache2 -            systemctl start apache2
+
+
+  CRON
+
+Users may want to schedule a certain action or task to take place after the system has booted. Take, for example, running commands, backing up files, or launching your favourite programs on, such as Spotify or Google Chrome.
+
+We're going to be talking about the cron process, but more specifically, how we can interact with it via the use of crontabs
+
+Crontabs can be edited by using crontab -e, where you can select an editor (such as Nano) to edit your crontab.
+

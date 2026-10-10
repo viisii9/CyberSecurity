@@ -1,0 +1,6 @@
+#### Race Conditions
+Can we reuse a single $10 gift card to pay for a $100 item? Can we apply the same discount to our shopping cart multiple times?
+A race condition is a situation in computer programs where the timing of events influences the behaviour and outcome of the program. It typically happens when a variable gets accessed and modified by multiple threads.
+
+
+

